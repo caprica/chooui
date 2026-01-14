@@ -1,0 +1,5 @@
+# Build target directory
+/target
+
+# SQLite database files
+*.db*

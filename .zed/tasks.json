@@ -1,0 +1,13 @@
+[
+  {
+    "label": "Rust: Run in Kitty",
+    "command": "kitty",
+    "args": [
+      "bash",
+      "-c",
+      "\"cargo run; echo; echo '--- Finished ---'; read -n 1\""
+    ],
+    "use_new_terminal": false,
+    "reveal": "never"
+  }
+]
