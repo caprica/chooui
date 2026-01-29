@@ -30,12 +30,15 @@
 //! Most functions in this module use [`rusqlite::Connection::prepare_cached`]
 //! to reduce SQL parsing overhead.
 
+mod model;
 pub(crate) mod scan;
 
 use rusqlite::Connection;
 use anyhow::{Context, Result};
 
-use crate::model::{Album, Artist, Track, TrackInfo};
+use crate::model::{Album, Artist, SearchQuery, Track, TrackInfo};
+
+const MIN_SEARCH_LEN: usize = 3;
 
 /// Opens a connection to the SQLite database and configures performance settings.
 ///
@@ -100,13 +103,13 @@ fn create_schema(conn: &Connection) -> Result<()> {
 
         CREATE TABLE IF NOT EXISTS artists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
+            name TEXT NOT NULL COLLATE NOCASE UNIQUE
         );
 
         CREATE TABLE IF NOT EXISTS albums (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
             artist_id INTEGER NOT NULL,
+            title TEXT NOT NULL COLLATE NOCASE,
             UNIQUE (artist_id, title),
             FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE CASCADE
         );
@@ -115,9 +118,12 @@ fn create_schema(conn: &Connection) -> Result<()> {
 
         CREATE TABLE IF NOT EXISTS tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            track_number INTEGER,
             album_id INTEGER NOT NULL,
+            track_number INTEGER,
+            title TEXT NOT NULL COLLATE NOCASE,
+            duration INTEGER NOT NULL,
+            genre TEXT,
+            year INTEGER,
             filename TEXT NOT NULL UNIQUE,
             UNIQUE (album_id, filename)
             FOREIGN KEY (album_id) REFERENCES albums (id) ON DELETE CASCADE
@@ -198,7 +204,53 @@ pub(crate) fn fetch_artist_album_titles(conn: &Connection, artist_id: i32) -> Re
     Ok(results)
 }
 
-/// Fetches all tracks for an artist.
+/// Fetches all tracks associated with a specific album, ordered by track
+/// number and title.
+///
+/// This function retrieves the complete list of tracks for the given album
+/// to facilitate sequential playback or detailed album views.
+///
+/// # Arguments
+///
+/// * `conn` - A reference to the SQLite connection.
+/// * `album_id` - The unique identifier of the album.
+///
+/// # Errors
+///
+/// Returns an error if the SQL query fails or if there is a type mismatch
+/// when mapping the database rows to the [`Track`] struct.
+///
+/// # Examples
+///
+/// ```ignore
+/// let tracks = fetch_album_tracks(&conn, album_id).expect("Failed to fetch tracks");
+/// assert!(!tracks.is_empty());
+/// ```
+pub fn fetch_album_tracks(conn: &Connection, album_id: i32) -> Result<Vec<Track>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, track_number, title, album_id, filename
+         FROM tracks
+         WHERE album_id = ?
+         ORDER BY track_number, title
+    "
+    )?;
+
+    let rows = stmt.query_map([album_id], |row| {
+        Ok(Track {
+            id: row.get(0)?,
+            track_number: row.get(1)?,
+            title: row.get(2)?,
+            album_id: row.get(3)?,
+            filename: row.get(4)?,
+        })
+    })?;
+
+    let mut results = Vec::new();
+    for row in rows { results.push(row?); }
+    Ok(results)
+}
+
+/// Fetches all track information for an artist.
 ///
 /// This function looks up all tracks for the artist with the given id by
 /// joining the `tracks`, `albums` and `artists` tables.
@@ -223,7 +275,7 @@ pub(crate) fn fetch_artist_album_titles(conn: &Connection, artist_id: i32) -> Re
 /// let tracks = fetch_artist_tracks(&conn, artist_id).expect("Failed to fetch tracks");
 /// assert!(!tracks.is_empty());
 /// ```
-pub(crate) fn fetch_artist_tracks(conn: &Connection, artist_id: i32) -> Result<Vec<TrackInfo>> {
+pub(crate) fn fetch_artist_trackinfo(conn: &Connection, artist_id: i32) -> Result<Vec<TrackInfo>> {
     let sql = "
         SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.filename
         FROM tracks tr
@@ -239,7 +291,7 @@ pub(crate) fn fetch_artist_tracks(conn: &Connection, artist_id: i32) -> Result<V
     Ok(results)
 }
 
-/// Fetches all tracks for an album.
+/// Fetches all track information for an album.
 ///
 /// This function looks up all tracks for the album with the given id by
 /// joining the `tracks`, `albums` and `artists` tables.
@@ -264,7 +316,7 @@ pub(crate) fn fetch_artist_tracks(conn: &Connection, artist_id: i32) -> Result<V
 /// let tracks = fetch_album_tracks(&conn, album_id).expect("Failed to fetch tracks");
 /// assert!(!tracks.is_empty());
 /// ```
-pub(crate) fn fetch_album_tracks(conn: &Connection, album_id: i32) -> Result<Vec<TrackInfo>> {
+pub(crate) fn fetch_album_track_info(conn: &Connection, album_id: i32) -> Result<Vec<TrackInfo>> {
     let sql = "
         SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.filename
         FROM tracks tr
@@ -280,7 +332,7 @@ pub(crate) fn fetch_album_tracks(conn: &Connection, album_id: i32) -> Result<Vec
     Ok(results)
 }
 
-/// Fetches a track.
+/// Fetches track information.
 ///
 /// This function looks up the track with the given id by joining the `tracks`,
 /// `albums` and `artists` tables.
@@ -308,7 +360,7 @@ pub(crate) fn fetch_album_tracks(conn: &Connection, album_id: i32) -> Result<Vec
 /// let tracks = fetch_track(&conn, track_id).expect("Failed to fetch track");
 /// assert!(!tracks.is_empty());
 /// ```
-pub(crate) fn fetch_track(conn: &Connection, track_id: i32) -> Result<Vec<TrackInfo>> {
+pub(crate) fn fetch_track_info(conn: &Connection, track_id: i32) -> Result<Vec<TrackInfo>> {
     let sql = "
         SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.filename
         FROM tracks tr
@@ -323,78 +375,91 @@ pub(crate) fn fetch_track(conn: &Connection, track_id: i32) -> Result<Vec<TrackI
     Ok(results)
 }
 
-
-
-
-
-
-pub fn get_album_tracks_x(conn: &Connection, album_id: i32) -> Result<Vec<Track>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, track_number, title, album_id, filename
-         FROM tracks
-         WHERE album_id = ?
-         ORDER BY track_number, title
-    "
-    )?;
-
-    let rows = stmt.query_map([album_id], |row| {
-        Ok(Track {
-            id: row.get(0)?,
-            track_number: row.get(1)?,
-            title: row.get(2)?,
-            album_id: row.get(3)?,
-            filename: row.get(4)?,
-        })
-    })?;
-
-    let mut results = Vec::new();
-    for row in rows { results.push(row?); }
-    Ok(results)
-}
-
-pub fn get_track_info(conn: &Connection, track_id: i32) -> Result<TrackInfo> {
-    let mut stmt = conn.prepare("
-        SELECT ar.id, al.id, tr.id, tr.track_number, ar.name, al.title, tr.title
+pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<TrackInfo>> {
+    let mut sql = String::from("
+        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
-        WHERE tr.id = ?
-    ")?;
+    ");
 
-    // FIXME this is total garbage wth
-    let row = stmt.query_one([track_id], |row| {
-        Ok(TrackInfo {
-            track_id: row.get(2)?,
-            track_title: row.get(6)?,
-            track_number: row.get(3)?,
-            album_title: row.get(5)?,
-            artist_name: row.get(4)?,
-            filename: row.get(5)?,
-        })
-    })?;
+    let mut filters = Vec::new();
+    let mut params = Vec::new();
 
-    Ok(row)
+    if query.search.len() >= MIN_SEARCH_LEN {
+        filters.push("(LOWER(ar.name) LIKE ? OR LOWER(al.title) LIKE ? OR LOWER(tr.title) LIKE ?)".to_string());
+        let param = format!("%{}%", query.search);
+        params.push(param.clone());
+        params.push(param.clone());
+        params.push(param.clone());
+    }
+
+    if query.artist.len() >= MIN_SEARCH_LEN {
+        filters.push("(LOWER(ar.name) LIKE ?)".to_string());
+        params.push(format!("%{}%", query.artist.to_lowercase()));
+    }
+
+    if query.album.len() >= MIN_SEARCH_LEN {
+        filters.push("(LOWER(al.title) LIKE ?)".to_string());
+        params.push(format!("%{}%", query.album.to_lowercase()));
+    }
+
+    if query.track.len() >= MIN_SEARCH_LEN {
+        filters.push("(LOWER(tr.title) LIKE ?)".to_string());
+        params.push(format!("%{}%", query.track.to_lowercase()));
+    }
+
+    if !filters.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&filters.join(" AND "));
+    }
+
+    sql.push_str(" ORDER BY ar.name, al.title, tr.track_number");
+
+    let mut stmt = conn.prepare_cached(&sql)?;
+    let results = stmt.query_map(rusqlite::params_from_iter(params), TrackInfo::from_row)?.collect::<Result<Vec<_>, _>>()?;
+
+    Ok(results)
 }
 
-impl TrackInfo {
+enum SearchType {
+    Artist,
+    Album,
+    Track
+}
 
-    /// Maps a SQLite row to a [`TrackInfo`] instance.
-    ///
-    /// This is a helper function designed to be used with [`rusqlite::Statement::query_map`].
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`rusqlite::Error`] if:
-    /// * The row does not contain enough columns.
-    /// * The data in a column cannot be converted to the required Rust type.
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(Self {
-            artist_name: row.get(0)?,
-            album_title: row.get(1)?,
-            track_id: row.get(2)?,
-            track_number: row.get(3)?,
-            track_title: row.get(4)?,
-            filename: row.get(5)?,
-        })
-    }
+pub(crate) fn search_by_artist_name(conn: &Connection, name: &str) -> Result<Vec<TrackInfo>> {
+    search_tracks(conn, SearchType::Artist, name)
+}
+
+pub(crate) fn search_by_album_title(conn: &Connection, title: &str) -> Result<Vec<TrackInfo>> {
+    search_tracks(conn, SearchType::Album, title)
+}
+
+pub(crate) fn search_by_track_title(conn: &Connection, title: &str) -> Result<Vec<TrackInfo>> {
+    search_tracks(conn, SearchType::Track, title)
+}
+
+fn search_tracks(conn: &Connection, search_type: SearchType, search_value: &str) -> Result<Vec<TrackInfo>> {
+    let join = match search_type {
+        SearchType::Artist => "ar.name",
+        SearchType::Album => "al.title",
+        SearchType::Track => "tr.title",
+    };
+
+    let sql = format!("
+        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
+        FROM tracks tr
+        JOIN albums al ON tr.album_id = al.id
+        JOIN artists ar ON al.artist_id = ar.id
+        WHERE {join} LIKE ?
+        ORDER BY ar.name, al.title, tr.track_number
+    ");
+
+    let param = format!("%{}%", search_value);
+
+    let mut stmt = conn.prepare_cached(&sql)?;
+    let results = stmt.query_map([param], TrackInfo::from_row)?.collect::<Result<Vec<_>, _>>()?;
+
+    Ok(results)
 }
