@@ -17,28 +17,33 @@
 //!
 //! This module implements the command pattern used to offload potentially
 //! blocking database queries from the main UI thread. It provides a dedicated
-//! worker loop that translates [`AppCommand`] requests into database
-//! operations //! and broadcasts the results back to the application via
+//! worker loop that translates [`AppCommand`] requests into database (and
+//! other operations and broadcasts the results back to the application via
 //! [`AppEvent`]s.
 
 use std::{path::Path, sync::mpsc::{Receiver, Sender}, thread};
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::{actions::events::AppEvent, db::{self, scan}};
+use crate::{MainView, actions::events::AppEvent, db::{self, scan}, model::SearchQuery};
 
 const DATABASE_FILE: &str = "music.db";
+
+const MIN_SEARCH_LEN: usize = 3;
 
 #[derive(Debug)]
 pub(crate) enum AppCommand {
     ScanCatalog,
+    SetMainView(MainView),
+    Search(SearchQuery),
+    AddSelectionToPlaylist,
     GetBrowserArtists,
     GetBrowserAlbums(i32),
     GetBrowserTracks(i32),
-    GetNowPlaying(i32),
     AddArtistToQueue(i32),
     AddAlbumToQueue(i32),
     AddTrackToQueue(i32),
+    ExitApplication,
 }
 
 /// Spawns a background thread to process application commands.
@@ -74,10 +79,24 @@ fn handle_command(conn: &mut Connection, command: AppCommand, event_tx: &Sender<
             event_tx.send(AppEvent::SetBrowserTracks(vec![]))?;
 
             let music_dir = "/disks/data/othermusic"; // FIXME hard-code
-            scan::process_music_library(conn, Path::new(music_dir))?;
+            scan::process_music_library(conn, Path::new(music_dir)).expect("failed to process catalog");
+
 
             event_tx.send(AppEvent::CatalogUpdated)?;
-        },
+        }
+        AppCommand::SetMainView(main_view) => {
+            event_tx.send(AppEvent::SetMainView(main_view))?;
+        }
+        AppCommand::AddSelectionToPlaylist => {
+            event_tx.send(AppEvent::AddSelectionToPlaylist)?;
+        }
+        AppCommand::Search(query) => {
+            let can_search = query.search.len() >= MIN_SEARCH_LEN || query.artist.len() >= MIN_SEARCH_LEN || query.album.len() >= MIN_SEARCH_LEN || query.track.len() >= MIN_SEARCH_LEN;
+            if can_search {
+                let search_results = db::search(&conn, &query)?;
+                event_tx.send(AppEvent::SearchResultsReady(search_results))?;
+            }
+        }
         AppCommand::GetBrowserArtists => {
             let artists = db::fetch_artist_names(&conn)?;
             event_tx.send(AppEvent::SetBrowserArtists(artists))?;
@@ -87,24 +106,23 @@ fn handle_command(conn: &mut Connection, command: AppCommand, event_tx: &Sender<
             event_tx.send(AppEvent::SetBrowserAlbums(albums))?;
         }
         AppCommand::GetBrowserTracks(album_id) => {
-            let tracks = db::get_album_tracks_x(&conn, album_id)?;
+            let tracks = db::fetch_album_tracks(&conn, album_id)?;
             event_tx.send(AppEvent::SetBrowserTracks(tracks))?;
         }
-        AppCommand::GetNowPlaying(track_id) => {
-            let track_info = db::get_track_info(&conn, track_id)?;
-            event_tx.send(AppEvent::SetNowPlaying(track_info))?;
-        },
         AppCommand::AddArtistToQueue(artist_id) => {
-            let tracks = db::fetch_artist_tracks(&conn, artist_id)?;
+            let tracks = db::fetch_artist_trackinfo(&conn, artist_id)?;
             event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
-        },
+        }
         AppCommand::AddAlbumToQueue(album_id) => {
-            let tracks = db::fetch_album_tracks(&conn, album_id)?;
+            let tracks = db::fetch_album_track_info(&conn, album_id)?;
             event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
-        },
+        }
         AppCommand::AddTrackToQueue(track_id) => {
-            let tracks = db::fetch_track(&conn, track_id)?;
+            let tracks = db::fetch_track_info(&conn, track_id)?;
             event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
+        }
+        AppCommand::ExitApplication => {
+            event_tx.send(AppEvent::ExitApplication)?;
         }
     }
 
