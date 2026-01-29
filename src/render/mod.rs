@@ -25,15 +25,19 @@
 //! terminal tick or state change to provide a reactive user interface.
 
 mod browser;
+mod commander;
 mod icons;
 mod player;
-mod queue;
 
 use ratatui::{
-    Frame, layout::{Constraint, Direction, Layout, Rect}, style::Style, widgets::{Block, Borders, Paragraph}
+    Frame, layout::{Constraint, Direction, Layout, Rect}, style::Style, widgets::{Block, Borders, Padding, Paragraph}
 };
 
-use crate::{App, render::{browser::draw_browser, player::draw_player, queue::draw_queue}, theme::Theme};
+use crate::{App, render::{commander::draw_commander, player::draw_player}, theme::Theme};
+
+pub(crate) trait Render {
+    fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme);
+}
 
 /// Renders the user interface to the terminal frame.
 ///
@@ -63,6 +67,7 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
             Constraint::Length(3),
             Constraint::Min(0),
             Constraint::Length(7),
+            Constraint::Length(1),
         ])
         .split(area);
 
@@ -70,23 +75,39 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
     let main = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(30),
+            Constraint::Length(0),
             Constraint::Min(0),
         ])
         .split(outer[1]);
 
-    draw_header(f, outer[0], &app.theme);
-    draw_queue(f, main[0], &app.queue, &app.theme);
-    draw_browser(f, main[1], &mut app.media_browser);
+    draw_header(f, outer[0], &app, &app.theme);
+
+    match app.main_view {
+        crate::MainView::Playlist => app.playlist_view.draw(f, main[1], &app.theme),
+        crate::MainView::Search => app.search_view.draw(f, main[1], &app.theme),
+        crate::MainView::Browse => browser::draw_browser(f, main[1], &mut app.media_browser),
+    };
+
     draw_player(f, outer[2], app);
+
+    draw_commander(f, outer[3], app);
 }
 
-fn draw_header(f: &mut Frame, area: Rect, theme: &Theme) {
-    let header = Paragraph::new(" Chooui ")
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_colour))
-        );
-    f.render_widget(header, area);
+fn draw_header(f: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let outer = Block::default()
+    .padding(Padding::horizontal(1))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border_colour));
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(35), // for future use (maybe)
+        ])
+        .split(inner);
+
+    f.render_widget(Paragraph::new("Chooui"), chunks[0]);
 }
