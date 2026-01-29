@@ -43,7 +43,6 @@ use rusqlite::{params, Connection};
 use walkdir::WalkDir;
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Instant;
 
 /// Recursively scans a directory for MP3 files and synchronizes the database.
 ///
@@ -56,11 +55,15 @@ use std::time::Instant;
 /// * `conn` - A mutable reference to the SQLite database connection.
 /// * `root` - The filesystem path to the directory containing the music library.
 ///
+/// # Returns
+///
+/// Returns the total number of tracks successfully imported into the database.
+///
 /// # Errors
 ///
 /// Returns an error if the transaction fails, if the directory is inaccessible,
 /// or if database constraints are violated during insertion.
-pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Result<()> {
+pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Result<i64> {
     let mut artist_cache: HashMap<String, i64> = HashMap::new();
     let mut album_cache: HashMap<(i64, String), i64> = HashMap::new();
 
@@ -71,8 +74,6 @@ pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Resul
     tx.execute("DELETE FROM artists", [])?;
 
     tx.execute("DELETE FROM sqlite_sequence WHERE name IN ('artists', 'albums', 'tracks')", [])?;
-
-    let start = Instant::now();
 
     for entry in WalkDir::new(root)
         .into_iter()
@@ -142,15 +143,11 @@ pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Resul
 
     tx.commit().context("Failed to commit transaction")?;
 
-    // eprintln!("Media scan completed: {:.2?}", start.elapsed());
-
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM tracks",
         [],
         |row| row.get(0)
     )?;
 
-    // eprintln!("Total tracks in library: {}", count);
-
-    Ok(())
+    Ok(count)
 }
