@@ -37,6 +37,8 @@
 
 mod actions;
 mod browser;
+mod commander;
+mod components;
 mod db;
 mod model;
 mod player;
@@ -56,11 +58,19 @@ use ratatui::{
     Terminal, backend::CrosstermBackend
 };
 
-use crate::{actions::{commands::AppCommand, events::{AppEvent, process_events}}, browser::MediaBrowser, model::TrackInfo, player::{AudioPlayer, PlayerState}, queue::Queue, theme::Theme};
+use crate::{actions::{commands::AppCommand, events::{AppEvent, Focus, process_events}}, browser::MediaBrowser, commander::Commander, components::{PlaylistView, SearchView}, model::TrackInfo, player::{AudioPlayer, PlayerState}, queue::Queue, theme::Theme};
+
+#[derive(Debug, PartialEq)]
+enum MainView {
+    Playlist,
+    Search,
+    Browse,
+}
 
 /// Application state.
 struct App {
     pub theme: Theme,
+    pub main_view: MainView,
 
     pub event_tx: Sender<AppEvent>,
     pub event_rx: Receiver<AppEvent>,
@@ -69,6 +79,12 @@ struct App {
 
     pub audio_player: AudioPlayer,
 
+    pub focus: Focus,
+
+    pub search_view: SearchView,
+    pub playlist_view: PlaylistView,
+
+    pub commander: Commander,
     pub media_browser: MediaBrowser,
 
     pub player_state: PlayerState,
@@ -91,10 +107,15 @@ impl App {
 
         Ok(Self {
             theme: Theme::default(),
+            main_view: MainView::Playlist,
             event_tx,
             event_rx,
             command_tx: database_tx,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
+            focus: Focus::None,
+            search_view: SearchView::new(),
+            playlist_view: PlaylistView::new(),
+            commander: Commander::new(),
             media_browser: MediaBrowser::new(),
             player_state: PlayerState::Stopped,
             now_playing: None,
