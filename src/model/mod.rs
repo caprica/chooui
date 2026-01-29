@@ -13,6 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+//! Domain models and core data structures.
+//!
+//! This module defines the central entities of the application—such as Art
+//! Artists, Albums, and Tracks—representing the underlying data schema used
+//! for metadata management and playback.
+
 #[derive(Debug, Clone)]
 pub struct Artist {
     pub id: i32,
@@ -46,4 +52,41 @@ pub struct TrackInfo {
     pub album_title: String,
     pub artist_name: String,
     pub filename: String,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub(crate) struct SearchQuery {
+    pub(crate) search: String,
+    pub(crate) artist: String,
+    pub(crate) album: String,
+    pub(crate) track: String
+}
+
+impl SearchQuery {
+    pub(crate) fn for_artist(artist: String) -> Self {
+        Self {
+            search: String::default(),
+            artist: artist,
+            album: String::default(),
+            track: String::default(),
+        }
+    }
+
+    pub(crate) fn for_album(album: String) -> Self {
+        Self {
+            search: String::default(),
+            artist: String::default(),
+            album: album,
+            track: String::default(),
+        }
+    }
+
+    pub(crate) fn for_track(track: String) -> Self {
+        Self {
+            search: String::default(),
+            artist: String::default(),
+            album: String::default(),
+            track: track,
+        }
+    }
 }
