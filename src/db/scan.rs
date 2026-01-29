@@ -99,7 +99,10 @@ pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Resul
 
         let mut artist_name = tag.artist().unwrap_or_else(|| "Unknown Artist".into()).to_string();
         let album_title = tag.album().unwrap_or_else(|| "Unknown Album".into()).to_string();
+        let year = tag.year();
         let track_title = tag.title().unwrap_or_else(|| path.file_name().unwrap().to_string_lossy()).to_string();
+        let duration = i64::try_from(tagged_file.properties().duration().as_secs()).unwrap_or(-1);
+        let genre = tag.genre().unwrap_or_else(|| "".into()).to_string();
 
         let album_artist_name = tag.get(&ItemKey::AlbumArtist)
             .and_then(|item| item.value().text())
@@ -132,8 +135,8 @@ pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Resul
         let filename = path.to_str().context("Path contains invalid UTF-8")?.to_string();
 
         tx.execute(
-            "INSERT OR IGNORE INTO tracks (album_id, track_number, title, filename) VALUES (?, ?, ?, ?)",
-            params![album_id, track_number, track_title, filename],
+            "INSERT OR IGNORE INTO tracks (album_id, track_number, title, duration, genre, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![album_id, track_number, track_title, duration, genre, year, filename],
         )?;
     }
 
