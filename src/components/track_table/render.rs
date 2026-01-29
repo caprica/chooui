@@ -21,7 +21,7 @@
 
 use ratatui::{Frame, layout::{Alignment, Constraint, Rect}, style::{Color, Style}, text::Line, widgets::{Block, Cell, Row, Table}};
 
-use crate::{components::TrackTable, theme::Theme, views::Render};
+use crate::{components::TrackTable, render::Render, theme::Theme};
 
 impl Render for TrackTable<'_> {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
