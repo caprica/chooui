@@ -27,8 +27,7 @@ use crate::{App, player::PlayerState, render::icons::{ICON_PAUSE, ICON_PLAY, ICO
 /// Renders the main player widget including track info and controls.
 pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Player ")
+        .borders(Borders::TOP | Borders::BOTTOM)
         .border_style(Style::default().fg(app.theme.border_colour))
         .padding(Padding::horizontal(1));
 
@@ -109,7 +108,7 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
         .split(control_chunks[1]);
 
     let volume_gauge = Gauge::default()
-        .gauge_style(Style::default().fg(app.theme.accent_colour)).bg(app.theme.gauge_track_colour)
+        .gauge_style(Style::default().fg(app.theme.accent_colour).bg(app.theme.gauge_track_colour))
         .ratio(vol_ratio)
         .label("")
         .use_unicode(true);
