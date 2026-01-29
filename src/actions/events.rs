@@ -31,13 +31,13 @@
 //! 3. **Render**: After each event is processed, the UI is re-drawn using the
 //!   `ratatui` terminal.
 
-use std::io::Stdout;
+use std::{io::Stdout, sync::mpsc::Sender};
 
 use anyhow::{Result};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 
-use crate::{App, actions::commands::AppCommand, browser::MediaBrowserPane, model::{Album, Artist, Track, TrackInfo}, player::PlayerState, render::draw};
+use crate::{App, MainView, actions::commands::AppCommand, browser::MediaBrowserPane, components::TrackTableDelegate, model::{Album, Artist, SearchQuery, Track, TrackInfo}, player::PlayerState, render::draw};
 
 const FINE_VOLUME_DELTA: i32 = 1;
 const VOLUME_DELTA: i32 = 5;
@@ -45,11 +45,25 @@ const VOLUME_DELTA: i32 = 5;
 const FINE_SEEK_DELTA: i32 = 5;
 const SEEK_DELTA: i32 = 20;
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum Focus {
+    SearchInput,
+    None,
+}
+
 #[derive(Debug)]
 pub(crate) enum AppEvent {
     Key(KeyEvent),
 
     CatalogUpdated,
+
+    SetMainView(MainView),
+
+    ActivateSelection,
+    AddSelectionToPlaylist,
+
+    NewSearchQuery(SearchQuery),
+    SearchResultsReady(Vec<TrackInfo>),
 
     ArtistSelectionChanged(i32),
     AlbumSelectionChanged(i32),
@@ -78,6 +92,10 @@ pub(crate) enum AppEvent {
     FatalError(String),
 }
 
+pub(crate) trait AppEventProcessor {
+    fn process_event(&mut self, event: Event, event_tx: &Sender<AppEvent>) -> Result<()>;
+}
+
 /// Runs the main application loop, handling events and rendering the UI in the
 /// terminal.
 ///
@@ -94,6 +112,26 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
 
             AppEvent::CatalogUpdated => {
                 app.command_tx.send(AppCommand::GetBrowserArtists).unwrap();
+            }
+
+            AppEvent::SetMainView(main_view) => app.main_view = main_view,
+
+            AppEvent::NewSearchQuery(query) => app.command_tx.send(AppCommand::Search(query))?,
+            AppEvent::SearchResultsReady(results) => {
+                app.search_view.set_tracks(results);
+                app.search_view.is_active = true;
+            },
+
+            AppEvent::AddSelectionToPlaylist => {
+                let tracks = app.search_view.clone_selected_tracks();
+                app.playlist_view.add_tracks(tracks);
+            }
+
+            AppEvent::ActivateSelection => {
+                let tracks = app.search_view.clone_selected_tracks();
+                app.playlist_view.add_tracks(tracks);
+                app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?;
+                app.search_view.clear_selection();
             }
 
             AppEvent::ArtistSelectionChanged(id) => app.command_tx.send(AppCommand::GetBrowserAlbums(id))?,
@@ -168,6 +206,24 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
 /// Returns an error if a command fails to send to a background worker or if
 /// a requested action cannot be executed.
 fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
+    let event = Event::Key(key);
+    let handled = app.commander.handle_event(event, &mut app.command_tx);
+    if handled {
+        return Ok(())
+    }
+
+    if app.search_view.is_active {
+        let event = Event::Key(key);
+        app.search_view.process_event(event, &app.event_tx)?;
+    }
+
+    match app.focus {
+        Focus::None => process_global_key_event(app, key),
+        _ => Ok(())
+    }
+}
+
+fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     match (key.code, key.modifiers) {
         (KeyCode::Char('q'), _) => {
             app.event_tx.send(AppEvent::ExitApplication)?;
@@ -181,6 +237,10 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('z'), _) => {
             app.command_tx.send(AppCommand::ScanCatalog)?;
         }
+
+        (KeyCode::Char('1'), _) => app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?,
+        (KeyCode::Char('2'), _) => app.command_tx.send(AppCommand::SetMainView(MainView::Search))?,
+        (KeyCode::Char('3'), _) => app.command_tx.send(AppCommand::SetMainView(MainView::Browse))?,
 
         // Navigation: Down / j
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
@@ -236,12 +296,12 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
 
         // Playback controls
         (KeyCode::Enter, _) => {
-            if let Some(id) = app.media_browser.selected_track_id() {
-                if let Some(t) = app.media_browser.tracks.iter().find(|t| t.id == id) {
-                    app.audio_player.play_file(&t.filename)?;
-                    app.command_tx.send(AppCommand::GetNowPlaying(t.id))?;
-                }
-            }
+            // if let Some(id) = app.media_browser.selected_track_id() {
+            //     if let Some(t) = app.media_browser.tracks.iter().find(|t| t.id == id) {
+            //         app.audio_player.play_file(&t.filename)?;
+            //         app.command_tx.send(AppCommand::GetNowPlaying(t.id))?;
+            //     }
+            // }
         }
         (KeyCode::Char(','), _) => app.audio_player.seek(-FINE_SEEK_DELTA)?,
         (KeyCode::Char('.'), _) => app.audio_player.seek(FINE_SEEK_DELTA)?,
@@ -281,4 +341,12 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     }
 
     Ok(())
+}
+
+impl TrackTableDelegate for Sender<AppEvent> {
+
+    fn on_activate_selection(&self) {
+        let _ = self.send(AppEvent::ActivateSelection);
+        // FIXME we probably ok to panic here?
+    }
 }
