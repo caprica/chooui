@@ -21,7 +21,7 @@
 
 use ratatui::{Frame, prelude::Rect};
 
-use crate::{components::PlaylistView, theme::Theme, views::Render};
+use crate::{components::PlaylistView, render::Render, theme::Theme};
 
 impl Render for PlaylistView {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {

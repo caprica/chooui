@@ -21,7 +21,7 @@
 
 use ratatui::{Frame, prelude::Rect};
 
-use crate::{components::SearchView, theme::Theme, views::Render};
+use crate::{components::SearchView, render::Render, theme::Theme};
 
 impl Render for SearchView {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
