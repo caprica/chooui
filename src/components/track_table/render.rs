@@ -40,7 +40,7 @@ impl TrackTable<'_> {
             };
 
             let duration: u64 = item.duration.try_into().unwrap_or(0);
-            let time = crate::util::format::format_time(duration, false);
+            let time = crate::util::format::format_time(duration);
 
             let track_number = format!("{:02}", item.track_number);
 

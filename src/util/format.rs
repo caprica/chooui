@@ -25,11 +25,11 @@
 /// # Examples
 ///
 /// ```
-/// assert_eq!(format_time(65), "01:05");
+/// assert_eq!(format_time(65), "1:05");
 /// assert_eq!(format_time(3600), "60:00");
 /// ```
 pub(crate) fn format_time(total_seconds: u64) -> String {
     let mins = total_seconds / 60;
     let secs = total_seconds % 60;
-    format!("{:02}:{:02}", mins, secs)
+    format!("{}:{:02}", mins, secs)
 }
