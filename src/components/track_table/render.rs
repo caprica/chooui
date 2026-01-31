@@ -23,15 +23,16 @@ use ratatui::{Frame, layout::{Alignment, Constraint, Rect}, style::{Color, Style
 
 use crate::{components::TrackTable, render::Render, theme::Theme};
 
-impl Render for TrackTable<'_> {
+impl Render for TrackTable {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
         self.draw_table(f, area, theme);
     }
 }
 
-impl TrackTable<'_> {
+impl TrackTable {
     fn draw_table(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        let rows = self.tracks.iter().map(|item| {
+        let tracks = self.tracks.lock().unwrap();
+        let rows = tracks.iter().map(|item| {
             let selected = self.selection.contains(&item.track_id);
             let selection_indicator = if selected {
                 Line::from("+").style(Style::default().fg(Color::Black).bg(theme.accent_colour))

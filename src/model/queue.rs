@@ -18,97 +18,90 @@
 //! This module provides state for the media player queue, managing a list of
 //! tracks queued for playback.
 
-use std::collections::{HashSet, VecDeque};
+use std::{collections::{HashSet, VecDeque}, sync::{Arc, Mutex}};
+
 use rand::{rng, seq::SliceRandom};
 
 use crate::model::TrackInfo;
 
 pub(crate) struct Queue {
+    tracks: Arc<Mutex<Vec<TrackInfo>>>,
     queued: VecDeque<TrackInfo>,
     played: Vec<TrackInfo>,
-    pub(crate) current: Option<TrackInfo>
 }
 
 impl Queue {
     pub(crate) fn new() -> Self {
         Self {
+            tracks: Arc::new(Mutex::new(vec![])),
             queued: VecDeque::new(),
             played: Vec::new(),
-            current: None
         }
     }
 
     pub(crate) fn add_tracks(&mut self, tracks: Vec<TrackInfo>) {
         self.queued.extend(tracks);
+
+        self.sync_tracks();
     }
 
     pub(crate) fn remove_tracks(&mut self, track_ids: Vec<i32>) {
         let ids_to_remove: HashSet<i32> = track_ids.into_iter().collect();
-
-        if let Some(ref track) = self.current {
-            if ids_to_remove.contains(&track.track_id) {
-                self.current = None;
-            }
-        }
-
         self.played.retain(|track| !ids_to_remove.contains(&track.track_id));
         self.queued.retain(|track| !ids_to_remove.contains(&track.track_id));
+
+        self.sync_tracks();
     }
 
     pub(crate) fn shuffle(&mut self) {
         let mut rng = rng();
-        let mut tmp: Vec<TrackInfo> = self.queued.drain(..).collect();
-        tmp.shuffle(&mut rng);
-        self.queued.extend(tmp)
+        let slice = self.queued.make_contiguous();
+        slice.shuffle(&mut rng);
+
+        self.sync_tracks();
     }
 
     pub(crate) fn clear(&mut self) {
         self.queued.clear();
+        self.played.clear();
+
+        self.sync_tracks();
     }
 
     pub(crate) fn reset(&mut self) {
-        if let Some(track) = self.current.take() {
-            self.queued.push_front(track);
-        }
-
         while let Some(track) = self.played.pop() {
             self.queued.push_front(track);
         }
     }
 
     pub(crate) fn current(&self) -> Option<&TrackInfo> {
-        self.current.as_ref()
-    }
-
-    pub(crate) fn played(&self) -> Vec<TrackInfo> {
-        self.played.iter().cloned().collect()
-    }
-
-    pub(crate) fn queued(&self) -> Vec<TrackInfo> {
-        self.queued.iter().cloned().collect()
+        self.played.last()
     }
 
     pub(crate) fn next(&mut self) -> Option<&TrackInfo> {
-        if let Some(track) = self.current.take() {
+        if let Some(track) = self.queued.pop_front() {
             self.played.push(track);
         }
 
-        self.current = self.queued.pop_front();
-
-        self.current.as_ref()
+        self.played.last()
     }
 
     pub(crate) fn previous(&mut self) -> Option<&TrackInfo> {
-        if self.played.is_empty() {
-            return self.current.as_ref();
-        }
-
-        if let Some(track) = self.current.take() {
+        if let Some(track) = self.played.pop() {
             self.queued.push_front(track);
         }
 
-        self.current = self.played.pop();
+        self.played.last()
+    }
 
-        self.current.as_ref()
+    pub(crate) fn tracks(&self) -> Arc<Mutex<Vec<TrackInfo>>> {
+        Arc::clone(&self.tracks)
+    }
+
+    fn sync_tracks(&self) {
+        let mut locked_tracks = self.tracks.lock().unwrap();
+        locked_tracks.clear();
+        locked_tracks.extend(self.played.iter().cloned());
+        locked_tracks.extend(self.queued.iter().cloned());
     }
 }

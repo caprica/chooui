@@ -29,7 +29,7 @@ use crate::{actions::events::{AppEvent, AppEventProcessor}, components::Playlist
 impl AppEventProcessor for PlaylistView {
     fn process_event(&mut self, event: Event, event_tx: &Sender<AppEvent>) -> Result<()> {
         if self.is_active {
-            return self.table_state.as_widget().process_event(event, event_tx)
+            return self.track_table.process_event(event, event_tx)
         }
 
         Ok(())

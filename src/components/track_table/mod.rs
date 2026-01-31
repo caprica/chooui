@@ -23,7 +23,7 @@
 mod event;
 mod render;
 
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::{Arc, Mutex}};
 
 use ratatui::widgets::TableState;
 
@@ -33,39 +33,24 @@ pub(crate) trait TrackTableDelegate {
     fn on_activate_selection(&self);
 }
 
-pub(crate) struct TrackTableState {
-    pub(crate) tracks: Vec<TrackInfo>,
-    pub(crate) selection: HashSet<i32>,
-    pub(crate) table_state: TableState,
+pub(crate) struct TrackTable {
+    tracks: Arc<Mutex<Vec<TrackInfo>>>,
+    selection: HashSet<i32>,
+    table_state: TableState,
 }
 
-impl TrackTableState {
-    pub(crate) fn new() -> Self {
+impl TrackTable {
+    pub(crate) fn new(tracks: Arc<Mutex<Vec<TrackInfo>>>) -> Self {
         Self {
-            tracks: vec![],
+            tracks,
             selection: HashSet::new(),
             table_state: TableState::new(),
         }
     }
 
-    pub(crate) fn as_widget(&mut self) -> TrackTable<'_> {
-        TrackTable {
-            tracks: &self.tracks,
-            selection: &mut self.selection,
-            table_state: &mut self.table_state
-        }
-    }
-}
-
-pub(crate) struct TrackTable<'a> {
-    tracks: &'a [TrackInfo],
-    selection: &'a mut HashSet<i32>,
-    table_state: &'a mut TableState,
-}
-
-impl<'a> TrackTable<'a> {
     fn goto_next(&mut self) {
-        let len = self.tracks.len();
+        let tracks = self.tracks.lock().unwrap();
+        let len = tracks.len();
         if len == 0 { return; }
         let i = match self.table_state.selected() {
             Some(i) => if i >= len - 1 { 0 } else { i + 1 },
@@ -75,7 +60,8 @@ impl<'a> TrackTable<'a> {
     }
 
     fn goto_previous(&mut self) {
-        let len = self.tracks.len();
+        let tracks = self.tracks.lock().unwrap();
+        let len = tracks.len();
         if len == 0 { return; }
         let i = match self.table_state.selected() {
             Some(i) => if i == 0 { len - 1 } else { i - 1 },
@@ -93,8 +79,9 @@ impl<'a> TrackTable<'a> {
     }
 
     fn toggle_select_current(&mut self) {
+        let tracks = self.tracks.lock().unwrap();
         if let Some(selected_index) = self.table_state.selected() {
-            if let Some(track) = self.tracks.get(selected_index) {
+            if let Some(track) = tracks.get(selected_index) {
                 let track_id = track.track_id;
                 if !self.selection.insert(track_id) {
                     self.selection.remove(&track_id);
@@ -104,11 +91,13 @@ impl<'a> TrackTable<'a> {
     }
 
     fn select_all(&mut self) {
-        self.selection.extend(self.tracks.iter().map(|t| t.track_id));
+        let tracks = self.tracks.lock().unwrap();
+        self.selection.extend(tracks.iter().map(|t| t.track_id));
     }
 
     fn select_inverse(&mut self) {
-        for track in self.tracks.iter() {
+        let tracks = self.tracks.lock().unwrap();
+        for track in tracks.iter() {
             let track_id = track.track_id;
             if !self.selection.insert(track_id) {
                 self.selection.remove(&track_id);
@@ -118,5 +107,27 @@ impl<'a> TrackTable<'a> {
 
     fn select_none(&mut self) {
         self.selection.clear();
+    }
+
+    pub(crate) fn reset_table_selection(&mut self) {
+        self.goto_first();
+    }
+
+    pub(crate) fn ensure_table_selection(&mut self) {
+        if self.selection.is_empty() {
+            self.goto_first();
+        }
+    }
+
+    pub(crate) fn clear_selection(&mut self) {
+        self.selection.clear();
+    }
+
+    pub(crate) fn clone_selected_tracks(&self) -> Vec<TrackInfo> {
+        let tracks = self.tracks.lock().unwrap();
+        tracks.iter()
+            .filter(|t| self.selection.contains(&t.track_id))
+            .cloned()
+            .collect()
     }
 }

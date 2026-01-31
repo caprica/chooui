@@ -42,7 +42,6 @@ mod components;
 mod db;
 mod model;
 mod player;
-mod queue;
 mod render;
 mod theme;
 mod util;
@@ -58,7 +57,7 @@ use ratatui::{
     Terminal, backend::CrosstermBackend
 };
 
-use crate::{actions::{commands::AppCommand, events::{AppEvent, Focus, process_events}}, browser::MediaBrowser, commander::Commander, components::{PlaylistView, SearchView}, model::TrackInfo, player::{AudioPlayer, PlayerState}, queue::Queue, theme::Theme};
+use crate::{actions::{commands::AppCommand, events::{AppEvent, Focus, process_events}}, browser::MediaBrowser, commander::Commander, components::{PlaylistView, SearchView}, model::{TrackInfo, queue::Queue, search::Search}, player::{AudioPlayer, PlayerState}, theme::Theme};
 
 #[derive(Debug, PartialEq)]
 enum MainView {
@@ -81,6 +80,9 @@ struct App {
 
     pub focus: Focus,
 
+    pub queue: Queue,
+    pub search: Search,
+
     pub search_view: SearchView,
     pub playlist_view: PlaylistView,
 
@@ -94,8 +96,6 @@ struct App {
     pub player_time: Option<u64>,
     pub player_position: Option<f64>,
     pub volume: Option<u32>,
-
-    pub queue: Queue,
 }
 
 impl App {
@@ -105,6 +105,12 @@ impl App {
 
         let audio_player_event_tx = event_tx.clone();
 
+        let queue = Queue::new();
+        let playlist_tracks = queue.tracks();
+
+        let search = Search::new();
+        let search_tracks = search.tracks();
+
         Ok(Self {
             theme: Theme::default(),
             main_view: MainView::Playlist,
@@ -113,8 +119,10 @@ impl App {
             command_tx: database_tx,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
             focus: Focus::None,
-            search_view: SearchView::new(),
-            playlist_view: PlaylistView::new(),
+            queue,
+            search,
+            search_view: SearchView::new(search_tracks),
+            playlist_view: PlaylistView::new(playlist_tracks),
             commander: Commander::new(),
             media_browser: MediaBrowser::new(),
             player_state: PlayerState::Stopped,
@@ -124,7 +132,6 @@ impl App {
             player_time: None,
             player_position: None,
             volume: None,
-            queue: Queue::new()
         })
     }
 }

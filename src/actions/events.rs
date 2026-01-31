@@ -118,20 +118,25 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
 
             AppEvent::NewSearchQuery(query) => app.command_tx.send(AppCommand::Search(query))?,
             AppEvent::SearchResultsReady(results) => {
-                app.search_view.set_tracks(results);
+                app.search.set_tracks(results);
+
+                app.search_view.track_table.reset_table_selection();
                 app.search_view.is_active = true;
+                app.command_tx.send(AppCommand::SetMainView(MainView::Search))?;
             },
 
             AppEvent::AddSelectionToPlaylist => {
-                let tracks = app.search_view.clone_selected_tracks();
-                app.playlist_view.add_tracks(tracks);
+                let tracks = app.search_view.track_table.clone_selected_tracks();
+                app.queue.add_tracks(tracks);
             }
 
             AppEvent::ActivateSelection => {
-                let tracks = app.search_view.clone_selected_tracks();
-                app.playlist_view.add_tracks(tracks);
-                app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?;
-                app.search_view.clear_selection();
+                let tracks = app.search_view.track_table.clone_selected_tracks();
+                app.queue.add_tracks(tracks);
+
+                app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?; // FIXME maybe this should just set the prop, no need for an event?
+                app.search_view.track_table.clear_selection();
+                app.playlist_view.track_table.ensure_table_selection();
             }
 
             AppEvent::ArtistSelectionChanged(id) => app.command_tx.send(AppCommand::GetBrowserAlbums(id))?,

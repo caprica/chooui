@@ -22,42 +22,20 @@
 mod event;
 mod render;
 
-use crate::{components::TrackTableState, model::TrackInfo};
+use std::sync::{Arc, Mutex};
+
+use crate::{components::TrackTable, model::TrackInfo};
 
 pub(crate) struct SearchView {
-    pub table_state: TrackTableState,
-    pub is_active: bool,
+    pub(crate) track_table: TrackTable,
+    pub(crate) is_active: bool,
 }
 
 impl SearchView {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(tracks: Arc<Mutex<Vec<TrackInfo>>>) -> Self {
         Self {
-            table_state: TrackTableState::new(),
+            track_table: TrackTable::new(tracks),
             is_active: false
         }
-    }
-
-    pub(crate) fn set_tracks(&mut self, tracks: Vec<TrackInfo>) {
-        // Set the new tracks and reset any existing selection.
-        self.table_state.tracks = tracks;
-        self.table_state.selection.clear();
-
-        // Set a default selection if possible
-        if self.table_state.tracks.is_empty() {
-             self.table_state.table_state.select(None);
-        } else {
-            self.table_state.table_state.select(Some(0));
-        }
-    }
-
-    pub(crate) fn clone_selected_tracks(&self) -> Vec<TrackInfo> {
-        self.table_state.tracks.iter()
-            .filter(|t| self.table_state.selection.contains(&t.track_id))
-            .cloned()
-            .collect()
-    }
-
-    pub(crate) fn clear_selection(&mut self) {
-        self.table_state.selection.clear();
     }
 }

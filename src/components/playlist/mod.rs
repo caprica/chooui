@@ -22,28 +22,22 @@
 mod event;
 mod render;
 
+use std::sync::{Arc, Mutex};
+
 use crate::model::TrackInfo;
 
-use crate::components::TrackTableState;
+use crate::components::{TrackTable};
 
 pub(crate) struct PlaylistView {
-    pub table_state: TrackTableState,
-    pub is_active: bool,
+    pub(crate) track_table: TrackTable,
+    pub(crate) is_active: bool,
 }
 
 impl PlaylistView {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(tracks: Arc<Mutex<Vec<TrackInfo>>>) -> Self {
         Self {
-            table_state: TrackTableState::new(),
-            is_active: false
+            track_table: TrackTable::new(tracks),
+            is_active: false,
         }
-    }
-
-    pub(crate) fn set_tracks(&mut self, tracks: Vec<TrackInfo>) {
-        self.table_state.tracks = tracks;
-    }
-
-    pub(crate) fn add_tracks(&mut self, tracks: Vec<TrackInfo>) {
-        self.table_state.tracks.extend(tracks);
     }
 }

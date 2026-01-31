@@ -19,6 +19,9 @@
 //! Artists, Albums, and Tracks—representing the underlying data schema used
 //! for metadata management and playback.
 
+pub(crate) mod queue;
+pub(crate) mod search;
+
 #[derive(Debug, Clone)]
 pub struct Artist {
     pub id: i32,

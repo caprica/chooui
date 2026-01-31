@@ -25,6 +25,6 @@ use crate::{components::SearchView, render::Render, theme::Theme};
 
 impl Render for SearchView {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        self.table_state.as_widget().draw(f, area, theme);
+        self.track_table.draw(f, area, theme);
     }
 }

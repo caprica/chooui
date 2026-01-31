@@ -23,7 +23,7 @@ use crossterm::event::{Event, KeyCode, KeyModifiers};
 
 use crate::components::{TrackTable, TrackTableDelegate};
 
-impl TrackTable<'_> {
+impl TrackTable {
     pub(crate) fn process_event(&mut self, event: Event, delegate: &impl TrackTableDelegate) -> Result<()> {
         match event {
             Event::Key(key_event) => {

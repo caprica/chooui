@@ -13,18 +13,32 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! UI rendering logic for the playlist view.
+//! Media search management.
 //!
-//! This module handles the visual representation of the playlist interface by
-//! delegating the drawing process to the underlying track table widget based
-//! on the current theme and layout constraints.
+//! This module provides state for the media search view, managing a list of
+//! tracks matching a search query.
 
-use ratatui::{Frame, prelude::Rect};
+use std::sync::{Arc, Mutex};
 
-use crate::{components::PlaylistView, render::Render, theme::Theme};
+use crate::model::TrackInfo;
 
-impl Render for PlaylistView {
-    fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        self.track_table.draw(f, area, theme);
+pub(crate) struct Search {
+    tracks: Arc<Mutex<Vec<TrackInfo>>>,
+}
+
+impl Search {
+    pub(crate) fn new() -> Self {
+        Self {
+            tracks: Arc::new(Mutex::new(vec![])),
+        }
+    }
+
+    pub(crate) fn set_tracks(&mut self, tracks: Vec<TrackInfo>) {
+        let mut lock = self.tracks.lock().unwrap();
+        *lock = tracks;
+    }
+
+    pub(crate) fn tracks(&self) -> Arc<Mutex<Vec<TrackInfo>>> {
+        Arc::clone(&self.tracks)
     }
 }
