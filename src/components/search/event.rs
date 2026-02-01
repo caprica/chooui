@@ -41,8 +41,6 @@ impl AppEventProcessor for SearchView {
                         let tracks = self.track_table.clone_tracks(track_ids);
                         event_tx.send(AppEvent::AddTracksToPlaylist(tracks))?;
                     }
-
-                    _ => {}
                 }
             }
         }

@@ -39,8 +39,6 @@ impl AppEventProcessor for PlaylistView {
 
                     TrackTableAction::CommitSelection(track_ids) => {
                     }
-
-                    _ => {}
                 }
             }
         }
