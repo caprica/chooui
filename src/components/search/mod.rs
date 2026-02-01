@@ -14,10 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Search results view and track selection management.
-//!
-//! This module coordinates the `TrackTableState` for search results,
-//! providing methods to update track listings, manage selection lifecycle,
-//! and retrieve selected track data.
 
 mod event;
 mod render;

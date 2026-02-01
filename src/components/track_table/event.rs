@@ -18,13 +18,13 @@
 //! This module maps raw terminal keyboard events to table navigation,
 //! selection logic, and delegate notifications.
 
-use anyhow::{Result};
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 
-use crate::components::{TrackTable, TrackTableDelegate};
+use crate::components::{TrackTable, TrackTableAction};
 
 impl TrackTable {
-    pub(crate) fn process_event(&mut self, event: Event, delegate: &impl TrackTableDelegate) -> Result<()> {
+    pub(crate) fn process_event(&mut self, event: Event) -> Option<TrackTableAction> {
+        // Internal events
         match event {
             Event::Key(key_event) => {
                 match (key_event.code, key_event.modifiers) {
@@ -47,14 +47,36 @@ impl TrackTable {
                         self.goto_previous();
                     }
 
-                    (KeyCode::Enter, _) => delegate.on_activate_selection(),
-
                     _ => {}
                 }
             }
+
             _ => {}
         }
 
-        Ok(())
+        // External events that result in a table action
+        let action = match event {
+            Event::Key(key_event) => {
+                match (key_event.code, key_event.modifiers) {
+                    (KeyCode::Enter, _) => {
+                        Some(&self.selection)
+                            .filter(|s| !s.is_empty())
+                            .map(|s| TrackTableAction::CommitSelection(s.clone()))
+                    }
+
+                    (KeyCode::Char('p'), _) => {
+                        self.table_state.selected()
+                            .and_then(|i| self.tracks.lock().unwrap().get(i).map(|t| t.track_id))
+                            .map(TrackTableAction::ActivateCurrent)
+                    }
+
+                    _ => None
+                }
+            }
+
+            _ => None
+        };
+
+        action
     }
 }

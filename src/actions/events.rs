@@ -37,19 +37,13 @@ use anyhow::{Result};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 
-use crate::{App, MainView, actions::commands::AppCommand, browser::MediaBrowserPane, components::TrackTableDelegate, model::{Album, Artist, SearchQuery, Track, TrackInfo}, player::PlayerState, render::draw};
+use crate::{App, MainView, actions::commands::AppCommand, browser::MediaBrowserPane, model::{Album, Artist, SearchQuery, Track, TrackInfo}, player::PlayerState, render::draw};
 
 const FINE_VOLUME_DELTA: i32 = 1;
 const VOLUME_DELTA: i32 = 5;
 
 const FINE_SEEK_DELTA: i32 = 5;
 const SEEK_DELTA: i32 = 20;
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum Focus {
-    SearchInput,
-    None,
-}
 
 #[derive(Debug)]
 pub(crate) enum AppEvent {
@@ -59,7 +53,9 @@ pub(crate) enum AppEvent {
 
     SetMainView(MainView),
 
-    ActivateSelection,
+    PlayTrack(TrackInfo),
+
+    AddTracksToPlaylist(Vec<TrackInfo>),
     AddSelectionToPlaylist,
 
     NewSearchQuery(SearchQuery),
@@ -114,14 +110,28 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
                 app.command_tx.send(AppCommand::GetBrowserArtists).unwrap();
             }
 
-            AppEvent::SetMainView(main_view) => app.main_view = main_view,
+            AppEvent::SetMainView(main_view) => {
+                match main_view {
+                    MainView::Playlist => {
+                        app.playlist_view.is_active = true;
+                        app.search_view.is_active = false;
+                    }
+                    MainView::Search => {
+                        app.search_view.is_active = true;
+                        app.playlist_view.is_active = false;
+                    }
+                    MainView::Browse => {
+
+                    }
+                }
+                app.main_view = main_view;
+            }
 
             AppEvent::NewSearchQuery(query) => app.command_tx.send(AppCommand::Search(query))?,
             AppEvent::SearchResultsReady(results) => {
                 app.search.set_tracks(results);
 
                 app.search_view.track_table.reset_table_selection();
-                app.search_view.is_active = true;
                 app.command_tx.send(AppCommand::SetMainView(MainView::Search))?;
             },
 
@@ -130,11 +140,15 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
                 app.queue.add_tracks(tracks);
             }
 
-            AppEvent::ActivateSelection => {
-                let tracks = app.search_view.track_table.clone_selected_tracks();
+            AppEvent::PlayTrack(track) => {
+                let filename = track.filename;
+                app.audio_player.play_file(&filename)?;
+            }
+
+            AppEvent::AddTracksToPlaylist(tracks) => {
                 app.queue.add_tracks(tracks);
 
-                app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?; // FIXME maybe this should just set the prop, no need for an event?
+                app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?;
                 app.search_view.track_table.clear_selection();
                 app.playlist_view.track_table.ensure_table_selection();
             }
@@ -212,9 +226,14 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
 /// a requested action cannot be executed.
 fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     let event = Event::Key(key);
-    let handled = app.commander.handle_event(event, &mut app.command_tx);
+    let handled = app.commander.handle_event(event.clone(), &mut app.command_tx);
     if handled {
         return Ok(())
+    }
+
+    if app.playlist_view.is_active {
+        let event = Event::Key(key);
+        app.playlist_view.process_event(event, &app.event_tx)?;
     }
 
     if app.search_view.is_active {
@@ -222,10 +241,8 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         app.search_view.process_event(event, &app.event_tx)?;
     }
 
-    match app.focus {
-        Focus::None => process_global_key_event(app, key),
-        _ => Ok(())
-    }
+    process_global_key_event(app, key)?;
+    Ok(())
 }
 
 fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
@@ -346,12 +363,4 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     }
 
     Ok(())
-}
-
-impl TrackTableDelegate for Sender<AppEvent> {
-
-    fn on_activate_selection(&self) {
-        let _ = self.send(AppEvent::ActivateSelection);
-        // FIXME we probably ok to panic here?
-    }
 }

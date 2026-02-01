@@ -24,12 +24,25 @@ use std::sync::mpsc::Sender;
 use anyhow::Result;
 use crossterm::event::Event;
 
-use crate::{actions::events::{AppEvent, AppEventProcessor}, components::PlaylistView};
+use crate::{actions::events::{AppEvent, AppEventProcessor}, components::{PlaylistView, TrackTableAction}};
 
 impl AppEventProcessor for PlaylistView {
     fn process_event(&mut self, event: Event, event_tx: &Sender<AppEvent>) -> Result<()> {
         if self.is_active {
-            return self.track_table.process_event(event, event_tx)
+            if let Some(action) = self.track_table.process_event(event) {
+                match action {
+                    TrackTableAction::ActivateCurrent(track_id) => {
+                        if let Some(track) = self.track_table.clone_track(track_id) {
+                            event_tx.send(AppEvent::PlayTrack(track))?;
+                        }
+                    }
+
+                    TrackTableAction::CommitSelection(track_ids) => {
+                    }
+
+                    _ => {}
+                }
+            }
         }
 
         Ok(())

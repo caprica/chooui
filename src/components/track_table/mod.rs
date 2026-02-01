@@ -14,11 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Interactive track table widget and state management.
-//!
-//! This module provides a reusable table component for displaying and
-//! selecting tracks. It separates persistent state (`TrackTableState`) from
-//! the transient widget view (`TrackTable`) and uses a delegate pattern to
-//! decouple event handling from the main application logic.
 
 mod event;
 mod render;
@@ -29,8 +24,9 @@ use ratatui::widgets::TableState;
 
 use crate::model::TrackInfo;
 
-pub(crate) trait TrackTableDelegate {
-    fn on_activate_selection(&self);
+pub(crate) enum TrackTableAction {
+    ActivateCurrent(i32),
+    CommitSelection(HashSet<i32>),
 }
 
 pub(crate) struct TrackTable {
@@ -114,7 +110,7 @@ impl TrackTable {
     }
 
     pub(crate) fn ensure_table_selection(&mut self) {
-        if self.selection.is_empty() {
+        if self.table_state.selected().is_none() {
             self.goto_first();
         }
     }
@@ -127,6 +123,21 @@ impl TrackTable {
         let tracks = self.tracks.lock().unwrap();
         tracks.iter()
             .filter(|t| self.selection.contains(&t.track_id))
+            .cloned()
+            .collect()
+    }
+
+    pub(crate) fn clone_track(&self, track_id: i32) -> Option<TrackInfo> {
+        let locked = self.tracks.lock().unwrap();
+        locked.iter()
+            .find(|t| t.track_id == track_id)
+            .cloned()
+    }
+
+    pub(crate) fn clone_tracks(&self, track_ids: HashSet<i32>) -> Vec<TrackInfo> {
+        let locked = self.tracks.lock().unwrap();
+        locked.iter()
+            .filter(|t| track_ids.contains(&t.track_id))
             .cloned()
             .collect()
     }

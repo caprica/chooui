@@ -14,10 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Playlist management and track sequence state.
-//!
-//! This module coordinates the `TrackTableState` for the active playlist,
-//! providing methods to populate, append, and manage the collection of tracks
-//! queued for playback.
 
 mod event;
 mod render;
