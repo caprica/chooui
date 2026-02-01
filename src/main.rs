@@ -57,7 +57,7 @@ use ratatui::{
     Terminal, backend::CrosstermBackend
 };
 
-use crate::{actions::{commands::AppCommand, events::{AppEvent, Focus, process_events}}, browser::MediaBrowser, commander::Commander, components::{PlaylistView, SearchView}, model::{TrackInfo, queue::Queue, search::Search}, player::{AudioPlayer, PlayerState}, theme::Theme};
+use crate::{actions::{commands::AppCommand, events::{AppEvent, process_events}}, browser::MediaBrowser, commander::Commander, components::{PlaylistView, SearchView}, model::{TrackInfo, queue::Queue, search::Search}, player::{AudioPlayer, PlayerState}, theme::Theme};
 
 #[derive(Debug, PartialEq)]
 enum MainView {
@@ -77,8 +77,6 @@ struct App {
     pub command_tx: Sender<AppCommand>,
 
     pub audio_player: AudioPlayer,
-
-    pub focus: Focus,
 
     pub queue: Queue,
     pub search: Search,
@@ -118,7 +116,6 @@ impl App {
             event_rx,
             command_tx: database_tx,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
-            focus: Focus::None,
             queue,
             search,
             search_view: SearchView::new(search_tracks),
