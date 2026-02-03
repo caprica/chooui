@@ -26,55 +26,58 @@ impl TrackTable {
     pub(crate) fn process_event(&mut self, event: Event) -> Option<TrackTableAction> {
         // Internal events
         match event {
-            Event::Key(key_event) => {
-                match (key_event.code, key_event.modifiers) {
-                    (KeyCode::Char('j'), _) | (KeyCode::Down, _) => self.goto_next(),
-                    (KeyCode::Char('k'), _) | (KeyCode::Up, _) => self.goto_previous(),
-                    (KeyCode::Char('g'), _) => self.goto_first(),
-                    (KeyCode::Char('G'), _) => self.goto_last(),
+            Event::Key(key_event) => match (key_event.code, key_event.modifiers) {
+                (KeyCode::Char('j'), _) | (KeyCode::Down, _) => self.goto_next(),
+                (KeyCode::Char('k'), _) | (KeyCode::Up, _) => self.goto_previous(),
+                (KeyCode::Char('g'), _) => self.goto_first(),
+                (KeyCode::Char('G'), _) => self.goto_last(),
 
-                    (KeyCode::Char('a'), KeyModifiers::CONTROL) => self.select_all(),
-                    (KeyCode::Char('t'), KeyModifiers::CONTROL) => self.select_inverse(),
-                    (KeyCode::Char('u'), KeyModifiers::CONTROL) => self.select_none(),
+                (KeyCode::Char('H'), _) => self.goto_high(),
+                (KeyCode::Char('M'), _) => self.goto_middle(),
+                (KeyCode::Char('L'), _) => self.goto_low(),
 
-                    (KeyCode::Char(' '), _) => {
-                        self.toggle_select_current();
-                        self.goto_next();
-                    }
+                (KeyCode::Char('f'), KeyModifiers::CONTROL) => self.goto_page_forward(),
+                (KeyCode::Char('b'), KeyModifiers::CONTROL) => self.goto_page_back(),
+                (KeyCode::Char('d'), KeyModifiers::CONTROL) => self.goto_half_page_forward(),
+                (KeyCode::Char('u'), KeyModifiers::CONTROL) => self.goto_half_page_back(),
 
-                    (KeyCode::Backspace, _) => {
-                        self.toggle_select_current();
-                        self.goto_previous();
-                    }
+                (KeyCode::Char('a'), KeyModifiers::CONTROL) => self.select_all(),
+                (KeyCode::Char('t'), KeyModifiers::CONTROL) => self.select_inverse(),
+                (KeyCode::Char('l'), KeyModifiers::CONTROL) => self.select_none(),
 
-                    _ => {}
+                (KeyCode::Char(' '), _) => {
+                    self.toggle_select_current();
+                    self.goto_next();
                 }
-            }
+
+                (KeyCode::Backspace, _) => {
+                    self.toggle_select_current();
+                    self.goto_previous();
+                }
+
+                _ => {}
+            },
 
             _ => {}
         }
 
         // External events that result in a table action
         let action = match event {
-            Event::Key(key_event) => {
-                match (key_event.code, key_event.modifiers) {
-                    (KeyCode::Enter, _) => {
-                        Some(&self.selection)
-                            .filter(|s| !s.is_empty())
-                            .map(|s| TrackTableAction::CommitSelection(s.clone()))
-                    }
+            Event::Key(key_event) => match (key_event.code, key_event.modifiers) {
+                (KeyCode::Enter, _) => Some(&self.selection)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| TrackTableAction::CommitSelection(s.clone())),
 
-                    (KeyCode::Char('p'), _) => {
-                        self.table_state.selected()
-                            .and_then(|i| self.tracks.lock().unwrap().get(i).map(|t| t.track_id))
-                            .map(TrackTableAction::ActivateCurrent)
-                    }
+                (KeyCode::Char('p'), _) => self
+                    .table_state
+                    .selected()
+                    .and_then(|i| self.tracks.lock().unwrap().get(i).map(|t| t.track_id))
+                    .map(TrackTableAction::ActivateCurrent),
 
-                    _ => None
-                }
-            }
+                _ => None,
+            },
 
-            _ => None
+            _ => None,
         };
 
         action
