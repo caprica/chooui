@@ -33,11 +33,18 @@
 
 use std::{io::Stdout, sync::mpsc::Sender};
 
-use anyhow::{Result};
+use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 
-use crate::{App, MainView, actions::commands::AppCommand, browser::MediaBrowserPane, model::{Album, Artist, SearchQuery, Track, TrackInfo}, player::PlayerState, render::draw};
+use crate::{
+    App, MainView,
+    actions::commands::AppCommand,
+    browser::MediaBrowserPane,
+    model::{Album, Artist, SearchQuery, Track, TrackInfo},
+    player::PlayerState,
+    render::draw,
+};
 
 const FINE_VOLUME_DELTA: i32 = 1;
 const VOLUME_DELTA: i32 = 5;
@@ -49,6 +56,7 @@ const SEEK_DELTA: i32 = 20;
 pub(crate) enum AppEvent {
     Key(KeyEvent),
 
+    Catalog(CatalogEvent),
     CatalogUpdated,
 
     SetMainView(MainView),
@@ -88,6 +96,15 @@ pub(crate) enum AppEvent {
     FatalError(String),
 }
 
+#[derive(Debug)]
+pub(crate) enum CatalogEvent {
+    Started,
+    StartedDirectory(String),
+    ProcessedFile(usize, String),
+    FinishedDirectory(String),
+    Finished(i64),
+}
+
 pub(crate) trait AppEventProcessor {
     fn process_event(&mut self, event: Event, event_tx: &Sender<AppEvent>) -> Result<()>;
 }
@@ -97,7 +114,10 @@ pub(crate) trait AppEventProcessor {
 ///
 /// This function loops until a 'quit' event is received or the event channel
 /// is closed.
-pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<()> {
+pub(crate) fn process_events(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    app: &mut App,
+) -> Result<()> {
     while let Ok(event) = app.event_rx.recv() {
         if matches!(event, AppEvent::ExitApplication) {
             break;
@@ -105,6 +125,21 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
 
         match event {
             AppEvent::Key(key) => process_key_event(app, key)?,
+
+            AppEvent::Catalog(catalog_event) => {
+                let message = match catalog_event {
+                    CatalogEvent::Started => "Scanning media catalog...".to_string(),
+                    CatalogEvent::StartedDirectory(dir) => format!("Processing {}", dir),
+                    CatalogEvent::ProcessedFile(count, filename) => {
+                        format!("{}: {}", count, filename)
+                    }
+                    CatalogEvent::FinishedDirectory(dir) => format!("Finished processing {}", dir),
+                    CatalogEvent::Finished(count) => {
+                        format!("Finished scanning media catalog ({})", count)
+                    }
+                };
+                app.status.set_message(Some(message))
+            }
 
             AppEvent::CatalogUpdated => {
                 app.command_tx.send(AppCommand::GetBrowserArtists).unwrap();
@@ -120,9 +155,7 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
                         app.search_view.is_active = true;
                         app.playlist_view.is_active = false;
                     }
-                    MainView::Browse => {
-
-                    }
+                    MainView::Browse => {}
                 }
                 app.main_view = main_view;
             }
@@ -132,8 +165,9 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
                 app.search.set_tracks(results);
 
                 app.search_view.track_table.reset_table_selection();
-                app.command_tx.send(AppCommand::SetMainView(MainView::Search))?;
-            },
+                app.command_tx
+                    .send(AppCommand::SetMainView(MainView::Search))?;
+            }
 
             AppEvent::AddSelectionToPlaylist => {
                 let tracks = app.search_view.track_table.clone_selected_tracks();
@@ -148,13 +182,18 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
             AppEvent::AddTracksToPlaylist(tracks) => {
                 app.queue.add_tracks(tracks);
 
-                app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?;
+                app.command_tx
+                    .send(AppCommand::SetMainView(MainView::Playlist))?;
                 app.search_view.track_table.clear_selection();
                 app.playlist_view.track_table.ensure_table_selection();
             }
 
-            AppEvent::ArtistSelectionChanged(id) => app.command_tx.send(AppCommand::GetBrowserAlbums(id))?,
-            AppEvent::AlbumSelectionChanged(id) => app.command_tx.send(AppCommand::GetBrowserTracks(id))?,
+            AppEvent::ArtistSelectionChanged(id) => {
+                app.command_tx.send(AppCommand::GetBrowserAlbums(id))?
+            }
+            AppEvent::AlbumSelectionChanged(id) => {
+                app.command_tx.send(AppCommand::GetBrowserTracks(id))?
+            }
             AppEvent::AddTracksToQueue(tracks) => app.queue.add_tracks(tracks),
 
             AppEvent::SetBrowserArtists(artists) => {
@@ -189,10 +228,14 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
             AppEvent::TimeChanged(seconds) => {
                 app.player_time = Some(seconds as u64);
                 if let Some(duration) = app.player_duration {
-                    app.player_position = if duration > 0 { Some(seconds / duration as f64) } else { None };
+                    app.player_position = if duration > 0 {
+                        Some(seconds / duration as f64)
+                    } else {
+                        None
+                    };
                 }
-            },
-            AppEvent::Tick => {},
+            }
+            AppEvent::Tick => {}
             _ => {}
         }
 
@@ -226,9 +269,11 @@ pub(crate) fn process_events(terminal: &mut Terminal<CrosstermBackend<Stdout>>, 
 /// a requested action cannot be executed.
 fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     let event = Event::Key(key);
-    let handled = app.commander.handle_event(event.clone(), &mut app.command_tx);
+    let handled = app
+        .commander
+        .handle_event(event.clone(), &mut app.command_tx);
     if handled {
-        return Ok(())
+        return Ok(());
     }
 
     if app.playlist_view.is_active {
@@ -251,7 +296,9 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
             app.event_tx.send(AppEvent::ExitApplication)?;
         }
 
-        (KeyCode::Char('s'), modifiers) if modifiers == (KeyModifiers::CONTROL | KeyModifiers::ALT) => {
+        (KeyCode::Char('s'), modifiers)
+            if modifiers == (KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+        {
             // FIXME we need to prevent multiple by using an atomic boolean
             app.command_tx.send(AppCommand::ScanCatalog)?;
         }
@@ -260,57 +307,59 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
             app.command_tx.send(AppCommand::ScanCatalog)?;
         }
 
-        (KeyCode::Char('1'), _) => app.command_tx.send(AppCommand::SetMainView(MainView::Playlist))?,
-        (KeyCode::Char('2'), _) => app.command_tx.send(AppCommand::SetMainView(MainView::Search))?,
-        (KeyCode::Char('3'), _) => app.command_tx.send(AppCommand::SetMainView(MainView::Browse))?,
+        (KeyCode::Char('1'), _) => app
+            .command_tx
+            .send(AppCommand::SetMainView(MainView::Playlist))?,
+        (KeyCode::Char('2'), _) => app
+            .command_tx
+            .send(AppCommand::SetMainView(MainView::Search))?,
+        (KeyCode::Char('3'), _) => app
+            .command_tx
+            .send(AppCommand::SetMainView(MainView::Browse))?,
 
         // Navigation: Down / j
-        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
-            match app.media_browser.active_pane {
-                MediaBrowserPane::Artist => {
-                    app.media_browser.next_artist();
-                    if let Some(id) = app.media_browser.selected_artist_id() {
-                        app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
-                    }
-                }
-                MediaBrowserPane::Album => {
-                    app.media_browser.next_album();
-                    if let Some(id) = app.media_browser.selected_album_id() {
-                        app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
-                    }
-                }
-                MediaBrowserPane::Track => {
-                    app.media_browser.next_track();
-                    if let Some(id) = app.media_browser.selected_track_id() {
-                        app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
-                    }
+        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => match app.media_browser.active_pane {
+            MediaBrowserPane::Artist => {
+                app.media_browser.next_artist();
+                if let Some(id) = app.media_browser.selected_artist_id() {
+                    app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
                 }
             }
-        }
+            MediaBrowserPane::Album => {
+                app.media_browser.next_album();
+                if let Some(id) = app.media_browser.selected_album_id() {
+                    app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
+                }
+            }
+            MediaBrowserPane::Track => {
+                app.media_browser.next_track();
+                if let Some(id) = app.media_browser.selected_track_id() {
+                    app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
+                }
+            }
+        },
 
         // Navigation: Up / k
-        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
-            match app.media_browser.active_pane {
-                MediaBrowserPane::Artist => {
-                    app.media_browser.previous_artist();
-                    if let Some(id) = app.media_browser.selected_artist_id() {
-                        app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
-                    }
-                }
-                MediaBrowserPane::Album => {
-                    app.media_browser.previous_album();
-                    if let Some(id) = app.media_browser.selected_album_id() {
-                        app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
-                    }
-                }
-                MediaBrowserPane::Track => {
-                    app.media_browser.previous_track();
-                    if let Some(id) = app.media_browser.selected_track_id() {
-                        app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
-                    }
+        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => match app.media_browser.active_pane {
+            MediaBrowserPane::Artist => {
+                app.media_browser.previous_artist();
+                if let Some(id) = app.media_browser.selected_artist_id() {
+                    app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
                 }
             }
-        }
+            MediaBrowserPane::Album => {
+                app.media_browser.previous_album();
+                if let Some(id) = app.media_browser.selected_album_id() {
+                    app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
+                }
+            }
+            MediaBrowserPane::Track => {
+                app.media_browser.previous_track();
+                if let Some(id) = app.media_browser.selected_track_id() {
+                    app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
+                }
+            }
+        },
 
         // Pane Navigation
         (KeyCode::Char('h'), _) | (KeyCode::Left, _) => app.media_browser.previous_pane(),
@@ -338,23 +387,21 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('m'), _) => app.audio_player.toggle_mute()?,
 
         // Queue Management
-        (KeyCode::Char('a'), _) => {
-            match app.media_browser.active_pane {
-                MediaBrowserPane::Artist => {
-                    if let Some(id) = app.media_browser.selected_artist_id() {
-                        app.command_tx.send(AppCommand::AddArtistToQueue(id))?;
-                    }
-                },
-                MediaBrowserPane::Album => {
-                    if let Some(id) = app.media_browser.selected_album_id() {
-                        app.command_tx.send(AppCommand::AddAlbumToQueue(id))?;
-                    }
-                },
-                MediaBrowserPane::Track => {
-                    if let Some(id) = app.media_browser.selected_track_id() {
-                        app.command_tx.send(AppCommand::AddTrackToQueue(id))?;
-                    }
-                },
+        (KeyCode::Char('a'), _) => match app.media_browser.active_pane {
+            MediaBrowserPane::Artist => {
+                if let Some(id) = app.media_browser.selected_artist_id() {
+                    app.command_tx.send(AppCommand::AddArtistToQueue(id))?;
+                }
+            }
+            MediaBrowserPane::Album => {
+                if let Some(id) = app.media_browser.selected_album_id() {
+                    app.command_tx.send(AppCommand::AddAlbumToQueue(id))?;
+                }
+            }
+            MediaBrowserPane::Track => {
+                if let Some(id) = app.media_browser.selected_track_id() {
+                    app.command_tx.send(AppCommand::AddTrackToQueue(id))?;
+                }
             }
         },
         (KeyCode::Char('c'), _) => app.queue.clear(),
