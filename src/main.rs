@@ -82,6 +82,15 @@ enum MainView {
     Browse,
 }
 
+#[derive(Debug, PartialEq)]
+enum PlayMode {
+    // Play one track on demand.
+    PlayOne,
+
+    // Play through the playlist, automatically playing the next track.
+    Playlist,
+}
+
 /// Application state.
 struct App {
     pub config: AppConfig,
@@ -94,6 +103,7 @@ struct App {
 
     pub command_tx: Sender<AppCommand>,
 
+    pub play_mode: PlayMode,
     pub audio_player: AudioPlayer,
 
     pub queue: Queue,
@@ -134,6 +144,7 @@ impl App {
             event_tx,
             event_rx,
             command_tx: database_tx,
+            play_mode: PlayMode::PlayOne,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
             queue,
             search,

@@ -175,6 +175,7 @@ pub(crate) fn process_events(
 
             AppEvent::PlayTrack(track) => {
                 let filename = track.filename;
+                app.play_mode = crate::PlayMode::PlayOne;
                 app.audio_player.play_file(&filename)?;
             }
 
