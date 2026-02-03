@@ -138,6 +138,7 @@ pub(crate) fn process_events(
                         format!("Finished scanning media catalog ({})", count)
                     }
                 };
+                app.status.set_message(Some(message));
             }
 
             AppEvent::CatalogUpdated => {
