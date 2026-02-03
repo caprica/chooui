@@ -19,9 +19,17 @@
 //! column layout, selection highlighting, and theme application using the
 //! Ratatui widget system.
 
-use ratatui::{Frame, layout::{Alignment, Constraint, Rect}, style::{Color, Style}, text::Line, widgets::{Block, Cell, Row, Table}};
+use ratatui::{
+    Frame,
+    layout::{Alignment, Constraint, Rect},
+    style::{Color, Style},
+    text::Line,
+    widgets::{Block, Cell, Row, Table},
+};
 
 use crate::{components::TrackTable, render::Render, theme::Theme};
+
+const RESERVED_ROWS: usize = 2;
 
 impl Render for TrackTable {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
@@ -47,12 +55,29 @@ impl TrackTable {
 
             Row::new(vec![
                 Cell::from(selection_indicator),
-                Cell::from(Line::from(time).style(Style::default().fg(theme.table_time_fg)).alignment(Alignment::Right)),
+                Cell::from(
+                    Line::from(time)
+                        .style(Style::default().fg(theme.table_time_fg))
+                        .alignment(Alignment::Right),
+                ),
                 Cell::from(""),
-                Cell::from(Line::from(item.artist_name.as_str()).style(Style::default().fg(theme.table_artist_fg))),
-                Cell::from(Line::from(item.album_title.as_str()).style(Style::default().fg(theme.table_album_fg))),
-                Cell::from(Line::from(track_number).style(Style::default().fg(theme.table_track_number_fg)).alignment(Alignment::Right)),
-                Cell::from(Line::from(item.track_title.as_str()).style(Style::default().fg(theme.table_track_fg))),
+                Cell::from(
+                    Line::from(item.artist_name.as_str())
+                        .style(Style::default().fg(theme.table_artist_fg)),
+                ),
+                Cell::from(
+                    Line::from(item.album_title.as_str())
+                        .style(Style::default().fg(theme.table_album_fg)),
+                ),
+                Cell::from(
+                    Line::from(track_number)
+                        .style(Style::default().fg(theme.table_track_number_fg))
+                        .alignment(Alignment::Right),
+                ),
+                Cell::from(
+                    Line::from(item.track_title.as_str())
+                        .style(Style::default().fg(theme.table_track_fg)),
+                ),
             ])
         });
 
@@ -78,7 +103,11 @@ impl TrackTable {
                 Cell::from(Line::from("Track").alignment(Alignment::Right)),
                 Cell::from("Title"),
             ])
-            .style(ratatui::style::Style::default().bold().fg(theme.accent_colour))
+            .style(
+                ratatui::style::Style::default()
+                    .bold()
+                    .fg(theme.accent_colour),
+            )
             .bottom_margin(1),
         )
         .row_highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
@@ -86,5 +115,7 @@ impl TrackTable {
 
         let state = &mut self.table_state;
         f.render_stateful_widget(table, area, state);
+
+        self.table_rows = (area.height as usize).saturating_sub(RESERVED_ROWS);
     }
 }
