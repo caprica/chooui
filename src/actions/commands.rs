@@ -21,11 +21,21 @@
 //! other operations and broadcasts the results back to the application via
 //! [`AppEvent`]s.
 
-use std::{path::Path, sync::mpsc::{Receiver, Sender}, thread};
 use anyhow::Result;
 use rusqlite::Connection;
+use std::{
+    path::Path,
+    sync::mpsc::{Receiver, Sender},
+    thread,
+};
 
-use crate::{MainView, actions::events::AppEvent, db::{self, scan}, model::SearchQuery};
+use crate::{
+    MainView,
+    actions::events::AppEvent,
+    config::AppConfig,
+    db::{self, scan},
+    model::SearchQuery,
+};
 
 const DATABASE_FILE: &str = "music.db";
 
@@ -53,14 +63,21 @@ pub(crate) enum AppCommand {
 ///
 /// # Arguments
 ///
+/// * `config` - The application configuration.
 /// * `command_rx` - The receiving end of the command channel.
 /// * `event_tx` - The sending end of the channel for broadcasting results.
-pub(crate) fn spawn_command_worker(command_rx: Receiver<AppCommand>, event_tx: Sender<AppEvent>) {
+pub(crate) fn spawn_command_worker(
+    config: &AppConfig,
+    command_rx: Receiver<AppCommand>,
+    event_tx: Sender<AppEvent>,
+) {
+    let config = config.clone();
+
     thread::spawn(move || {
         let mut conn = db::init_db(DATABASE_FILE).expect("Failed to initialise database");
 
         while let Ok(request) = command_rx.recv() {
-            if let Err(e) = handle_command(&mut conn, request, &event_tx) {
+            if let Err(e) = handle_command(&config, &mut conn, request, &event_tx) {
                 let _ = event_tx.send(AppEvent::Error(e.to_string()));
             }
         }
@@ -71,16 +88,21 @@ pub(crate) fn spawn_command_worker(command_rx: Receiver<AppCommand>, event_tx: S
 ///
 /// This function implements the logic for each command and sends the result
 /// back through the application event channel.
-fn handle_command(conn: &mut Connection, command: AppCommand, event_tx: &Sender<AppEvent>) -> Result<()> {
+fn handle_command(
+    config: &AppConfig,
+    conn: &mut Connection,
+    command: AppCommand,
+    event_tx: &Sender<AppEvent>,
+) -> Result<()> {
     match command {
         AppCommand::ScanCatalog => {
             event_tx.send(AppEvent::SetBrowserArtists(vec![]))?;
             event_tx.send(AppEvent::SetBrowserAlbums(vec![]))?;
             event_tx.send(AppEvent::SetBrowserTracks(vec![]))?;
 
-            let music_dir = "/disks/data/othermusic"; // FIXME hard-code
-            scan::process_music_library(conn, Path::new(music_dir)).expect("failed to process catalog");
-
+            let music_dirs = &config.media_dirs;
+            scan::process_music_library(conn, music_dirs, event_tx)
+                .expect("failed to process catalog");
 
             event_tx.send(AppEvent::CatalogUpdated)?;
         }
@@ -91,7 +113,10 @@ fn handle_command(conn: &mut Connection, command: AppCommand, event_tx: &Sender<
             event_tx.send(AppEvent::AddSelectionToPlaylist)?;
         }
         AppCommand::Search(query) => {
-            let can_search = query.search.len() >= MIN_SEARCH_LEN || query.artist.len() >= MIN_SEARCH_LEN || query.album.len() >= MIN_SEARCH_LEN || query.track.len() >= MIN_SEARCH_LEN;
+            let can_search = query.search.len() >= MIN_SEARCH_LEN
+                || query.artist.len() >= MIN_SEARCH_LEN
+                || query.album.len() >= MIN_SEARCH_LEN
+                || query.track.len() >= MIN_SEARCH_LEN;
             if can_search {
                 let search_results = db::search(&conn, &query)?;
                 event_tx.send(AppEvent::SearchResultsReady(search_results))?;

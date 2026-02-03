@@ -39,10 +39,16 @@ use anyhow::{Context, Result};
 use lofty::prelude::*;
 use lofty::probe::Probe;
 use lofty::tag::ItemKey;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, Transaction, params};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::mpsc::Sender,
+    time::{Duration, Instant},
+};
 use walkdir::WalkDir;
-use std::collections::HashMap;
-use std::path::Path;
+
+use crate::actions::events::{AppEvent, CatalogEvent};
 
 /// Recursively scans a directory for MP3 files and synchronizes the database.
 ///
@@ -53,7 +59,8 @@ use std::path::Path;
 /// # Arguments
 ///
 /// * `conn` - A mutable reference to the SQLite database connection.
-/// * `root` - The filesystem path to the directory containing the music library.
+/// * `paths` - The names of to the directories containing the music library.
+/// * `event_tx` - The channel to send application events to.
 ///
 /// # Returns
 ///
@@ -63,7 +70,13 @@ use std::path::Path;
 ///
 /// Returns an error if the transaction fails, if the directory is inaccessible,
 /// or if database constraints are violated during insertion.
-pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Result<i64> {
+pub(crate) fn process_music_library(
+    conn: &mut Connection,
+    paths: &Vec<String>,
+    event_tx: &Sender<AppEvent>,
+) -> Result<i64> {
+    event_tx.send(AppEvent::Catalog(CatalogEvent::Started))?;
+
     let mut artist_cache: HashMap<String, i64> = HashMap::new();
     let mut album_cache: HashMap<(i64, String), i64> = HashMap::new();
 
@@ -73,81 +86,172 @@ pub(crate) fn process_music_library(conn: &mut Connection, root: &Path) -> Resul
     tx.execute("DELETE FROM albums", [])?;
     tx.execute("DELETE FROM artists", [])?;
 
-    tx.execute("DELETE FROM sqlite_sequence WHERE name IN ('artists', 'albums', 'tracks')", [])?;
+    tx.execute(
+        "DELETE FROM sqlite_sequence WHERE name IN ('artists', 'albums', 'tracks')",
+        [],
+    )?;
 
-    for entry in WalkDir::new(root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "mp3"))
-    {
-        let path = entry.path();
+    let mut count = 0;
 
-        let tagged_file = match Probe::open(path).and_then(|p| p.read()) {
-            Ok(file) => file,
-            Err(e) => {
-                eprintln!("Skipping {:?}: {}", path, e);
-                continue;
+    let mut last_update = Instant::now();
+    let update_interval = Duration::from_millis(100);
+
+    for root in paths {
+        event_tx.send(AppEvent::Catalog(CatalogEvent::StartedDirectory(
+            root.to_string(),
+        )))?;
+
+        for entry in WalkDir::new(root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map_or(false, |ext| ext.to_ascii_lowercase() == "mp3")
+            })
+        {
+            let path = entry.path();
+
+            process_track(&tx, path, &mut artist_cache, &mut album_cache)?;
+
+            count += 1;
+
+            if last_update.elapsed() >= update_interval {
+                let filename = path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Unknown".into());
+
+                let _ = event_tx.send(AppEvent::Catalog(CatalogEvent::ProcessedFile(
+                    count, filename,
+                )));
+
+                last_update = Instant::now();
             }
-        };
+        }
 
-        let tag = match tagged_file.primary_tag().or_else(|| tagged_file.first_tag()) {
-            Some(t) => t,
-            None => {
-                println!("Skipping (no tags): {}", path.display());
-                continue;
-            }
-        };
+        event_tx.send(AppEvent::Catalog(CatalogEvent::FinishedDirectory(
+            root.to_string(),
+        )))?;
+    }
 
-        let mut artist_name = tag.artist().unwrap_or_else(|| "Unknown Artist".into()).to_string();
-        let album_title = tag.album().unwrap_or_else(|| "Unknown Album".into()).to_string();
-        let year = tag.year();
-        let track_title = tag.title().unwrap_or_else(|| path.file_name().unwrap().to_string_lossy()).to_string();
-        let duration = i64::try_from(tagged_file.properties().duration().as_secs()).unwrap_or(-1);
-        let genre = tag.genre().unwrap_or_else(|| "".into()).to_string();
-
-        let album_artist_name = tag.get(&ItemKey::AlbumArtist)
-            .and_then(|item| item.value().text())
-            .map(|s| s.to_string());
-
-        let display_artist = album_artist_name.as_deref().or(Some(&artist_name)).unwrap().to_string();
-        artist_name = display_artist;
-
-        let track_number: Option<u32> = tag.track();
-
-        let artist_id = if let Some(&id) = artist_cache.get(&artist_name) {
-            id
-        } else {
-            tx.execute("INSERT OR IGNORE INTO artists (name) VALUES (?)", params![artist_name])?;
-            let id: i64 = tx.query_row("SELECT id FROM artists WHERE name = ?", params![artist_name], |r| r.get(0))?;
-            artist_cache.insert(artist_name.clone(), id);
-            id
-        };
-
-        let album_key = (artist_id, album_title.clone());
-        let album_id = if let Some(&id) = album_cache.get(&album_key) {
-            id
-        } else {
-            tx.execute("INSERT OR IGNORE INTO albums (artist_id, title) VALUES (?, ?)", params![artist_id, album_title])?;
-            let id: i64 = tx.query_row("SELECT id FROM albums WHERE artist_id = ? AND title = ?", params![artist_id, album_title], |r| r.get(0))?;
-            album_cache.insert(album_key, id);
-            id
-        };
-
-        let filename = path.to_str().context("Path contains invalid UTF-8")?.to_string();
-
-        tx.execute(
-            "INSERT OR IGNORE INTO tracks (album_id, track_number, title, duration, genre, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            params![album_id, track_number, track_title, duration, genre, year, filename],
-        )?;
+    for entry in paths.iter().flat_map(|root| {
+        WalkDir::new(root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map_or(false, |ext| ext.to_ascii_lowercase() == "mp3")
+            })
+    }) {
+        process_track(&tx, entry.path(), &mut artist_cache, &mut album_cache)?;
     }
 
     tx.commit().context("Failed to commit transaction")?;
 
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM tracks",
-        [],
-        |row| row.get(0)
-    )?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM tracks", [], |row| row.get(0))?;
+
+    event_tx.send(AppEvent::Catalog(CatalogEvent::Finished(count)))?;
 
     Ok(count)
+}
+
+fn process_track(
+    tx: &Transaction,
+    path: &Path,
+    artist_cache: &mut HashMap<String, i64>,
+    album_cache: &mut HashMap<(i64, String), i64>,
+) -> Result<()> {
+    let tagged_file = match Probe::open(path).and_then(|p| p.read()) {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("Skipping {:?}: {}", path, e);
+            return Ok(());
+        }
+    };
+
+    let tag = match tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag())
+    {
+        Some(t) => t,
+        None => {
+            println!("Skipping (no tags): {}", path.display());
+            return Ok(());
+        }
+    };
+
+    let artist_name = tag
+        .get(&ItemKey::AlbumArtist)
+        .and_then(|item| item.value().text())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            tag.artist()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "Unknown Artist".into())
+        });
+
+    let album_title = tag
+        .album()
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "Unknown Album".into());
+
+    let track_title = tag.title().map(|c| c.to_string()).unwrap_or_else(|| {
+        path.file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "Unknown Track".into())
+    });
+
+    let year = tag.year();
+    let duration = i64::try_from(tagged_file.properties().duration().as_secs()).unwrap_or(-1);
+    let genre = tag
+        .genre()
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "".into());
+    let track_number = tag.track();
+
+    let artist_id = if let Some(&id) = artist_cache.get(&artist_name) {
+        id
+    } else {
+        tx.execute(
+            "INSERT OR IGNORE INTO artists (name) VALUES (?)",
+            params![artist_name],
+        )?;
+        let id: i64 = tx.query_row(
+            "SELECT id FROM artists WHERE name = ?",
+            params![artist_name],
+            |r| r.get(0),
+        )?;
+        artist_cache.insert(artist_name, id);
+        id
+    };
+
+    let album_key = (artist_id, album_title.clone());
+    let album_id = if let Some(&id) = album_cache.get(&album_key) {
+        id
+    } else {
+        tx.execute(
+            "INSERT OR IGNORE INTO albums (artist_id, title) VALUES (?, ?)",
+            params![artist_id, album_title],
+        )?;
+        let id: i64 = tx.query_row(
+            "SELECT id FROM albums WHERE artist_id = ? AND title = ?",
+            params![artist_id, album_title],
+            |r| r.get(0),
+        )?;
+        album_cache.insert(album_key, id);
+        id
+    };
+
+    let filename = path
+        .to_str()
+        .context("Path contains invalid UTF-8")?
+        .to_string();
+    tx.execute(
+        "INSERT OR IGNORE INTO tracks (album_id, track_number, title, duration, genre, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        params![album_id, track_number, track_title, duration, genre, year, filename],
+    )?;
+
+    Ok(())
 }

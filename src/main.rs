@@ -39,6 +39,7 @@ mod actions;
 mod browser;
 mod commander;
 mod components;
+mod config;
 mod db;
 mod model;
 mod player;
@@ -47,17 +48,32 @@ mod theme;
 mod util;
 
 use anyhow::{Context, Result};
-use std::{io::{self}, sync::mpsc::{self, Receiver, Sender}, thread, time::Duration};
 use crossterm::{
     event::{self},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{
-    Terminal, backend::CrosstermBackend
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::{
+    io::{self},
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+    time::Duration,
 };
 
-use crate::{actions::{commands::AppCommand, events::{AppEvent, process_events}}, browser::MediaBrowser, commander::Commander, components::{PlaylistView, SearchView}, model::{TrackInfo, queue::Queue, search::Search}, player::{AudioPlayer, PlayerState}, theme::Theme};
+use crate::{
+    actions::{
+        commands::AppCommand,
+        events::{AppEvent, process_events},
+    },
+    browser::MediaBrowser,
+    commander::Commander,
+    components::{PlaylistView, SearchView},
+    config::AppConfig,
+    model::{TrackInfo, queue::Queue, search::Search},
+    player::{AudioPlayer, PlayerState},
+    theme::Theme,
+};
 
 #[derive(Debug, PartialEq)]
 enum MainView {
@@ -68,6 +84,8 @@ enum MainView {
 
 /// Application state.
 struct App {
+    pub config: AppConfig,
+
     pub theme: Theme,
     pub main_view: MainView,
 
@@ -98,7 +116,7 @@ struct App {
 
 impl App {
     /// Create a new instance of application state.
-    pub fn new(database_tx: Sender<AppCommand>) -> Result<Self> {
+    pub fn new(config: AppConfig, database_tx: Sender<AppCommand>) -> Result<Self> {
         let (event_tx, event_rx) = mpsc::channel();
 
         let audio_player_event_tx = event_tx.clone();
@@ -110,6 +128,7 @@ impl App {
         let search_tracks = search.tracks();
 
         Ok(Self {
+            config,
             theme: Theme::default(),
             main_view: MainView::Playlist,
             event_tx,
@@ -139,9 +158,11 @@ impl App {
 /// manages the terminal lifecycle, and returns an error if any part of the
 /// execution fails.
 fn main() -> Result<()> {
+    let config = config::load_config();
+
     let (database_tx, database_rx) = mpsc::channel();
 
-    let mut app = App::new(database_tx).context("Failed to initalise application")?;
+    let mut app = App::new(config, database_tx).context("Failed to initalise application")?;
 
     let mut terminal = setup_terminal(&app)?;
     let res = run(&mut terminal, &mut app, database_rx);
@@ -205,10 +226,14 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) {
 ///
 /// Returns an error if the event processing loop encounters an unrecoverable
 /// application error.
-fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App, command_rx: Receiver<AppCommand>) -> Result<()> {
+fn run(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    command_rx: Receiver<AppCommand>,
+) -> Result<()> {
     // Spawn a background worker to process application commands asynchronously.
     let command_event_tx = app.event_tx.clone();
-    actions::commands::spawn_command_worker(command_rx, command_event_tx);
+    actions::commands::spawn_command_worker(&app.config, command_rx, command_event_tx);
 
     // Spawn a thread to translate raw key events to application events.
     let tx_keys = app.event_tx.clone();
