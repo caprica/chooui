@@ -44,6 +44,7 @@ mod db;
 mod model;
 mod player;
 mod render;
+mod status;
 mod theme;
 mod util;
 
@@ -72,6 +73,7 @@ use crate::{
     config::AppConfig,
     model::{TrackInfo, queue::Queue, search::Search},
     player::{AudioPlayer, PlayerState},
+    status::Status,
     theme::Theme,
 };
 
@@ -106,6 +108,7 @@ struct App {
     pub play_mode: PlayMode,
     pub audio_player: AudioPlayer,
 
+    pub status: Status,
     pub queue: Queue,
     pub search: Search,
 
@@ -131,6 +134,8 @@ impl App {
 
         let audio_player_event_tx = event_tx.clone();
 
+        let status = Status::new();
+
         let queue = Queue::new();
         let playlist_tracks = queue.tracks();
 
@@ -146,6 +151,7 @@ impl App {
             command_tx: database_tx,
             play_mode: PlayMode::PlayOne,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
+            status,
             queue,
             search,
             search_view: SearchView::new(search_tracks),
