@@ -19,10 +19,19 @@
 //! track, playback controls, progress barsm and so on.
 
 use ratatui::{
-    Frame, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style, Stylize}, text::{Line, Span}, widgets::{Block, Borders, Gauge, Padding, Paragraph}
+    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, Borders, Gauge, Padding, Paragraph},
 };
 
-use crate::{App, player::PlayerState, render::icons::{ICON_PAUSE, ICON_PLAY, ICON_STOP}, util};
+use crate::{
+    App,
+    player::PlayerState,
+    render::icons::{ICON_PAUSE, ICON_PLAY, ICON_STOP},
+    util::{self, format::TimeFormat},
+};
 
 /// Renders the main player widget including track info and controls.
 pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
@@ -47,10 +56,7 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
 
     let info_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(30),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(30)])
         .split(chunks[0]);
 
     if let Some(track_info) = &app.now_playing {
@@ -61,12 +67,28 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
         };
 
         let track_line = Line::from(vec![
-            Span::styled(format!(" {} ", icon), Style::default().add_modifier(Modifier::BOLD)).fg(Color::White),
-            Span::styled(&track_info.track_title, Style::default().add_modifier(Modifier::BOLD)).fg(app.theme.accent_colour),
+            Span::styled(
+                format!(" {} ", icon),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(Color::White),
+            Span::styled(
+                &track_info.track_title,
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(app.theme.accent_colour),
             Span::raw(" from "),
-            Span::styled(&track_info.album_title, Style::default().add_modifier(Modifier::BOLD)).fg(app.theme.accent_colour),
+            Span::styled(
+                &track_info.album_title,
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(app.theme.accent_colour),
             Span::raw(" by "),
-            Span::styled(&track_info.artist_name, Style::default().add_modifier(Modifier::BOLD)).fg(app.theme.accent_colour),
+            Span::styled(
+                &track_info.artist_name,
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(app.theme.accent_colour),
         ]);
         f.render_widget(Paragraph::new(track_line), info_chunks[0]);
 
@@ -75,11 +97,23 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
         let remaining = duration.saturating_sub(time);
 
         let time_line = Line::from(vec![
-            Span::styled(util::format::format_time(time), Style::default().add_modifier(Modifier::BOLD)).fg(app.theme.accent_colour),
+            Span::styled(
+                util::format::format_time(time, TimeFormat::Minutes),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(app.theme.accent_colour),
             Span::styled(" / ", Style::default().add_modifier(Modifier::BOLD)).fg(Color::White),
-            Span::styled(util::format::format_time(duration), Style::default().add_modifier(Modifier::BOLD)).fg(app.theme.accent_colour),
+            Span::styled(
+                util::format::format_time(duration, TimeFormat::Minutes),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(app.theme.accent_colour),
             Span::styled(" (-", Style::default().add_modifier(Modifier::BOLD)).fg(Color::White),
-            Span::styled(util::format::format_time(remaining), Style::default().add_modifier(Modifier::BOLD)).fg(app.theme.accent_colour),
+            Span::styled(
+                util::format::format_time(remaining, TimeFormat::Minutes),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
+            .fg(app.theme.accent_colour),
             Span::styled(")", Style::default().add_modifier(Modifier::BOLD)).fg(Color::White),
         ]);
 
@@ -90,10 +124,7 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
 
     let control_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(26),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(26)])
         .split(chunks[2]);
 
     let volume = app.volume.unwrap_or(0);
@@ -101,14 +132,15 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
 
     let volume_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(5),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(5)])
         .split(control_chunks[1]);
 
     let volume_gauge = Gauge::default()
-        .gauge_style(Style::default().fg(app.theme.accent_colour).bg(app.theme.gauge_track_colour))
+        .gauge_style(
+            Style::default()
+                .fg(app.theme.accent_colour)
+                .bg(app.theme.gauge_track_colour),
+        )
         .ratio(vol_ratio)
         .label("")
         .use_unicode(true);
@@ -124,9 +156,10 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
     let position = app.player_position.unwrap_or(0.0).clamp(0.0, 1.0);
 
     let position_gauge = Gauge::default()
-        .gauge_style(Style::default()
-            .fg(app.theme.accent_colour)
-            .bg(app.theme.gauge_track_colour)
+        .gauge_style(
+            Style::default()
+                .fg(app.theme.accent_colour)
+                .bg(app.theme.gauge_track_colour),
         )
         .ratio(position)
         .label("")

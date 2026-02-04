@@ -215,6 +215,10 @@ impl TrackTable {
         self.selection.clear();
     }
 
+    pub(crate) fn selected_count(&self) -> usize {
+        self.selection.len()
+    }
+
     pub(crate) fn clone_selected_tracks(&self) -> Vec<TrackInfo> {
         let tracks = self.tracks.lock().unwrap();
         tracks

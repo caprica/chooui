@@ -27,7 +27,7 @@ use ratatui::{
     widgets::{Block, Cell, Row, Table},
 };
 
-use crate::{components::TrackTable, render::Render, theme::Theme};
+use crate::{components::TrackTable, render::Render, theme::Theme, util::format::TimeFormat};
 
 const RESERVED_ROWS: usize = 2;
 
@@ -49,8 +49,8 @@ impl TrackTable {
             };
 
             let duration: u64 = item.duration.try_into().unwrap_or(0);
-            let time = crate::util::format::format_time(duration);
-
+            let time = crate::util::format::format_time(duration, TimeFormat::Minutes);
+            let year = item.year.map(|y| y.to_string()).unwrap_or_default();
             let track_number = format!("{:02}", item.track_number);
 
             Row::new(vec![
@@ -65,6 +65,7 @@ impl TrackTable {
                     Line::from(item.artist_name.as_str())
                         .style(Style::default().fg(theme.table_artist_fg)),
                 ),
+                Cell::from(Line::from(year).style(Style::default().fg(theme.table_year_fg))),
                 Cell::from(
                     Line::from(item.album_title.as_str())
                         .style(Style::default().fg(theme.table_album_fg)),
@@ -87,10 +88,11 @@ impl TrackTable {
                 Constraint::Length(1),
                 Constraint::Length(6),
                 Constraint::Length(1),
-                Constraint::Percentage(20),
-                Constraint::Percentage(25),
+                Constraint::Fill(20),
+                Constraint::Length(4),
+                Constraint::Fill(25),
                 Constraint::Length(5),
-                Constraint::Percentage(55),
+                Constraint::Fill(55),
             ],
         )
         .header(
@@ -99,6 +101,7 @@ impl TrackTable {
                 Cell::from(Line::from("Time").alignment(Alignment::Right)),
                 Cell::from(""),
                 Cell::from("Artist"),
+                Cell::from("Year"),
                 Cell::from("Album"),
                 Cell::from(Line::from("Track").alignment(Alignment::Right)),
                 Cell::from("Title"),

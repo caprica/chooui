@@ -13,6 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+pub(crate) enum TimeFormat {
+    Minutes,
+    Hours,
+}
+
 /// Formats a duration in seconds into a human-readable `MM:SS` string.
 ///
 /// This is used primarily for displaying track positions and total durations
@@ -21,15 +26,29 @@
 /// # Arguments
 ///
 /// * `total_seconds` - The duration to format, represented as a 64-bit integer.
+/// * `style` - The formatting style to apply.
 ///
 /// # Examples
 ///
 /// ```
-/// assert_eq!(format_time(65), "1:05");
+/// assert_eq!(format_time(65, TimeFormat::Minutes), "1:05");
 /// assert_eq!(format_time(3600), "60:00");
 /// ```
-pub(crate) fn format_time(total_seconds: u64) -> String {
-    let mins = total_seconds / 60;
+pub(crate) fn format_time(total_seconds: u64, style: TimeFormat) -> String {
+    let hours = total_seconds / 3600;
+    let mins = (total_seconds % 3600) / 60;
     let secs = total_seconds % 60;
-    format!("{}:{:02}", mins, secs)
+
+    match style {
+        TimeFormat::Minutes => {
+            if hours > 0 {
+                format!("{hours}:{:02}:{:02}", mins, secs)
+            } else {
+                format!("{mins}:{:02}", secs)
+            }
+        }
+        TimeFormat::Hours => {
+            format!("{hours}:{:02}:{:02}", mins, secs)
+        }
+    }
 }
