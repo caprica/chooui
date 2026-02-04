@@ -18,7 +18,11 @@
 //! This module provides state for the media player queue, managing a list of
 //! tracks queued for playback.
 
-use std::{collections::{HashSet, VecDeque}, sync::{Arc, Mutex}};
+use std::{
+    collections::{HashSet, VecDeque},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use rand::{rng, seq::SliceRandom};
 
@@ -28,6 +32,9 @@ pub(crate) struct Queue {
     tracks: Arc<Mutex<Vec<TrackInfo>>>,
     queued: VecDeque<TrackInfo>,
     played: Vec<TrackInfo>,
+    total_duration: i64,
+    queued_duration: i64,
+    played_duration: i64,
 }
 
 impl Queue {
@@ -36,6 +43,9 @@ impl Queue {
             tracks: Arc::new(Mutex::new(vec![])),
             queued: VecDeque::new(),
             played: Vec::new(),
+            total_duration: 0,
+            queued_duration: 0,
+            played_duration: 0,
         }
     }
 
@@ -47,8 +57,10 @@ impl Queue {
 
     pub(crate) fn remove_tracks(&mut self, track_ids: Vec<i32>) {
         let ids_to_remove: HashSet<i32> = track_ids.into_iter().collect();
-        self.played.retain(|track| !ids_to_remove.contains(&track.track_id));
-        self.queued.retain(|track| !ids_to_remove.contains(&track.track_id));
+        self.played
+            .retain(|track| !ids_to_remove.contains(&track.track_id));
+        self.queued
+            .retain(|track| !ids_to_remove.contains(&track.track_id));
 
         self.sync_tracks();
     }
@@ -98,9 +110,26 @@ impl Queue {
         Arc::clone(&self.tracks)
     }
 
-    fn sync_tracks(&self) {
+    pub(crate) fn total_duration(&self) -> i64 {
+        self.total_duration
+    }
+
+    pub(crate) fn queued_duration(&self) -> i64 {
+        self.queued_duration
+    }
+
+    pub(crate) fn played_duration(&self) -> i64 {
+        self.played_duration
+    }
+
+    fn sync_tracks(&mut self) {
         let mut locked_tracks = self.tracks.lock().unwrap();
         locked_tracks.clear();
+
+        self.played_duration = self.played.iter().map(|t| t.duration).sum();
+        self.queued_duration = self.queued.iter().map(|t| t.duration).sum();
+        self.total_duration = self.played_duration + self.queued_duration;
+
         locked_tracks.extend(self.played.iter().cloned());
         locked_tracks.extend(self.queued.iter().cloned());
     }
