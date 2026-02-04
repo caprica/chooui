@@ -19,12 +19,39 @@
 //! delegating the drawing process to the underlying track table widget based
 //! on the current theme and layout constraints.
 
-use ratatui::{Frame, prelude::Rect};
+use std::fmt::Write;
 
-use crate::{components::SearchView, render::Render, theme::Theme};
+use ratatui::{
+    Frame,
+    layout::{Constraint, Direction, Layout},
+    prelude::Rect,
+    widgets::{Block, Borders, Padding, Paragraph},
+};
 
-impl Render for SearchView {
-    fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        self.track_table.draw(f, area, theme);
+use crate::{components::SearchView, model::search::Search, render::Render, theme::Theme};
+
+impl SearchView {
+    pub(crate) fn draw(&mut self, f: &mut Frame, area: Rect, search: &Search, theme: &Theme) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(2), Constraint::Min(0)])
+            .split(area);
+
+        let header_block = Block::default()
+            .borders(Borders::BOTTOM)
+            .padding(Padding::horizontal(1));
+
+        let track_count = search.tracks().lock().unwrap().len();
+        let selected_count = self.track_table.selected_count();
+
+        let mut header_text = format!("Search | {} results", track_count);
+        if selected_count > 0 {
+            let _ = write!(header_text, " | {} selected", selected_count);
+        }
+
+        let header = Paragraph::new(header_text).block(header_block);
+
+        f.render_widget(header, chunks[0]);
+        self.track_table.draw(f, chunks[1], theme);
     }
 }
