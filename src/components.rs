@@ -18,10 +18,12 @@
 //! This module acts as a central export point for reusable interface elements,
 //! organizing complex widgets into separately maintainable sub-modules.
 
+pub(crate) mod favourites;
 pub(crate) mod playlist;
 pub(crate) mod search;
 pub(crate) mod track_table;
 
+pub(crate) use favourites::*;
 pub(crate) use playlist::*;
 pub(crate) use search::*;
 pub(crate) use track_table::*;
