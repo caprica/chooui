@@ -53,6 +53,7 @@ pub(crate) enum AppCommand {
     AddArtistToQueue(i32),
     AddAlbumToQueue(i32),
     AddTrackToQueue(i32),
+    PlayTrack(i32),
     ExitApplication,
 }
 
@@ -143,8 +144,12 @@ fn handle_command(
             event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
         }
         AppCommand::AddTrackToQueue(track_id) => {
-            let tracks = db::fetch_track_info(&conn, track_id)?;
+            let tracks = vec![db::fetch_track_info(&conn, track_id)?];
             event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
+        }
+        AppCommand::PlayTrack(track_id) => {
+            let track = db::fetch_track_info(&conn, track_id)?;
+            event_tx.send(AppEvent::PlayTrack(track))?;
         }
         AppCommand::ExitApplication => {
             event_tx.send(AppEvent::ExitApplication)?;
