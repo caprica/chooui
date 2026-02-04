@@ -52,7 +52,9 @@ use anyhow::{Context, Result};
 use crossterm::{
     event::{self},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{
+        EnterAlternateScreen, LeaveAlternateScreen, SetTitle, disable_raw_mode, enable_raw_mode,
+    },
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
@@ -69,7 +71,7 @@ use crate::{
     },
     browser::MediaBrowser,
     commander::Commander,
-    components::{PlaylistView, SearchView},
+    components::{FavouritesView, PlaylistView, SearchView},
     config::AppConfig,
     model::{TrackInfo, queue::Queue, search::Search},
     player::{AudioPlayer, PlayerState},
@@ -81,6 +83,7 @@ use crate::{
 enum MainView {
     Playlist,
     Search,
+    Favourites,
     Browse,
 }
 
@@ -112,8 +115,9 @@ struct App {
     pub queue: Queue,
     pub search: Search,
 
-    pub search_view: SearchView,
     pub playlist_view: PlaylistView,
+    pub search_view: SearchView,
+    pub favourites_view: FavouritesView,
 
     pub commander: Commander,
     pub media_browser: MediaBrowser,
@@ -154,8 +158,9 @@ impl App {
             status,
             queue,
             search,
-            search_view: SearchView::new(search_tracks),
             playlist_view: PlaylistView::new(playlist_tracks),
+            search_view: SearchView::new(search_tracks),
+            favourites_view: FavouritesView::new(),
             commander: Commander::new(),
             media_browser: MediaBrowser::new(),
             player_state: PlayerState::Stopped,
@@ -206,6 +211,7 @@ fn setup_terminal(app: &App) -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
 
     enable_raw_mode().context("Failed to enable raw mode")?;
     let mut stdout = io::stdout();
+    execute!(stdout, SetTitle("Chooui"))?;
     execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
     let backend = CrosstermBackend::new(stdout);
