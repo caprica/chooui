@@ -149,10 +149,17 @@ pub(crate) fn process_events(
                 match main_view {
                     MainView::Playlist => {
                         app.playlist_view.is_active = true;
+                        app.favourites_view.is_active = false;
                         app.search_view.is_active = false;
                     }
                     MainView::Search => {
                         app.search_view.is_active = true;
+                        app.favourites_view.is_active = false;
+                        app.playlist_view.is_active = false;
+                    }
+                    MainView::Favourites => {
+                        app.favourites_view.is_active = true;
+                        app.search_view.is_active = false;
                         app.playlist_view.is_active = false;
                     }
                     MainView::Browse => {}
@@ -175,9 +182,9 @@ pub(crate) fn process_events(
             }
 
             AppEvent::PlayTrack(track) => {
-                let filename = track.filename;
                 app.play_mode = crate::PlayMode::PlayOne;
-                app.audio_player.play_file(&filename)?;
+                app.audio_player.play_file(&track.filename)?;
+                app.now_playing = Some(track);
             }
 
             AppEvent::AddTracksToPlaylist(tracks) => {
@@ -315,6 +322,9 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
             .command_tx
             .send(AppCommand::SetMainView(MainView::Search))?,
         (KeyCode::Char('3'), _) => app
+            .command_tx
+            .send(AppCommand::SetMainView(MainView::Favourites))?,
+        (KeyCode::Char('4'), _) => app
             .command_tx
             .send(AppCommand::SetMainView(MainView::Browse))?,
 
