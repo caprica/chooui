@@ -30,10 +30,17 @@ mod icons;
 mod player;
 
 use ratatui::{
-    Frame, layout::{Constraint, Direction, Layout, Rect}, style::Style, widgets::{Block, Borders, Padding, Paragraph}
+    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    widgets::{Block, Borders, Clear, Padding, Paragraph},
 };
 
-use crate::{App, render::{commander::draw_commander, player::draw_player}, theme::Theme};
+use crate::{
+    App,
+    render::{commander::draw_commander, player::draw_player},
+    theme::Theme,
+};
 
 pub(crate) trait Render {
     fn draw(&mut self, f: &mut Frame, area: Rect, theme: &Theme);
@@ -64,7 +71,6 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
             Constraint::Min(0),
             Constraint::Length(7),
             Constraint::Length(1),
@@ -74,40 +80,17 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
     // Main layout: sidebar, content
     let main = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(0),
-            Constraint::Min(0),
-        ])
-        .split(outer[1]);
-
-    draw_header(f, outer[0], &app, &app.theme);
+        .constraints([Constraint::Length(0), Constraint::Min(0)])
+        .split(outer[0]);
 
     match app.main_view {
-        crate::MainView::Playlist => app.playlist_view.draw(f, main[1], &app.theme),
-        crate::MainView::Search => app.search_view.draw(f, main[1], &app.theme),
+        crate::MainView::Playlist => app.playlist_view.draw(f, main[1], &app.queue, &app.theme),
+        crate::MainView::Search => app.search_view.draw(f, main[1], &app.search, &app.theme),
+        crate::MainView::Favourites => app.favourites_view.draw(f, main[1], &app.theme),
         crate::MainView::Browse => browser::draw_browser(f, main[1], &mut app.media_browser),
     };
 
-    draw_player(f, outer[2], app);
+    draw_player(f, outer[1], app);
 
-    draw_commander(f, outer[3], app);
-}
-
-fn draw_header(f: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let outer = Block::default()
-    .padding(Padding::horizontal(1))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border_colour));
-    let inner = outer.inner(area);
-    f.render_widget(outer, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(35), // for future use (maybe)
-        ])
-        .split(inner);
-
-    f.render_widget(Paragraph::new("Chooui"), chunks[0]);
+    draw_commander(f, outer[2], app);
 }
