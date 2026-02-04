@@ -30,6 +30,7 @@ pub(crate) struct Theme {
 
     pub(crate) table_time_fg: Color,
     pub(crate) table_artist_fg: Color,
+    pub(crate) table_year_fg: Color,
     pub(crate) table_album_fg: Color,
     pub(crate) table_track_number_fg: Color,
     pub(crate) table_track_fg: Color,
@@ -53,6 +54,7 @@ impl Theme {
 
             table_time_fg: Color::Rgb(162, 161, 166),
             table_artist_fg: Color::Rgb(255, 215, 0),
+            table_year_fg: Color::Rgb(162, 161, 166),
             table_album_fg: Color::Rgb(179, 157, 219),
             table_track_number_fg: Color::Rgb(162, 161, 166),
             table_track_fg: Color::Rgb(255, 255, 255),
