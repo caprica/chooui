@@ -19,12 +19,14 @@
 //! and high-level domain models, ensuring type-safe extraction of model
 //! attributes from database queries.
 
-use rusqlite::Row;
+use rusqlite::{
+    Result, Row, ToSql,
+    types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef},
+};
 
-use crate::model::TrackInfo;
+use crate::model::{Rating, TrackInfo};
 
 impl TrackInfo {
-
     /// Maps an SQLite row to a [`TrackInfo`] instance.
     ///
     /// This is a helper function designed to be used with [`rusqlite::Statement::query_map`].
@@ -39,12 +41,35 @@ impl TrackInfo {
             artist_name: row.get(0)?,
             album_title: row.get(1)?,
             track_id: row.get(2)?,
-            track_number: row.get(3)?,
-            track_title: row.get(4)?,
-            duration: row.get(5)?,
-            year: row.get(6)?,
-            genre: row.get(7)?,
-            filename: row.get(8)?,
+            durable_id: row.get(3)?,
+            track_number: row.get(4)?,
+            track_title: row.get(5)?,
+            duration: row.get(6)?,
+            year: row.get(7)?,
+            genre: row.get(8)?,
+            filename: row.get(9)?,
         })
+    }
+}
+
+impl ToSql for Rating {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
+        let val = match self {
+            Rating::Like => 1,
+            Rating::Neutral => 0,
+            Rating::Dislike => -1,
+        };
+        Ok(ToSqlOutput::from(val))
+    }
+}
+
+impl FromSql for Rating {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_i64()? {
+            1 => Ok(Rating::Like),
+            0 => Ok(Rating::Neutral),
+            -1 => Ok(Rating::Dislike),
+            _ => Err(rusqlite::types::FromSqlError::InvalidType),
+        }
     }
 }

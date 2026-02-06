@@ -34,9 +34,9 @@ mod model;
 pub(crate) mod scan;
 
 use anyhow::{Context, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 
-use crate::model::{Album, Artist, SearchQuery, Track, TrackInfo};
+use crate::model::{Album, Artist, Rating, SearchQuery, Track, TrackInfo};
 
 const MIN_SEARCH_LEN: usize = 3;
 
@@ -123,6 +123,7 @@ fn create_schema(conn: &Connection) -> Result<()> {
 
         CREATE TABLE IF NOT EXISTS tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            durable_id INTEGER NOT NULL UNIQUE,
             album_id INTEGER NOT NULL,
             track_number INTEGER,
             title TEXT NOT NULL COLLATE NOCASE,
@@ -130,11 +131,17 @@ fn create_schema(conn: &Connection) -> Result<()> {
             genre TEXT,
             year INTEGER,
             filename TEXT NOT NULL UNIQUE,
-            UNIQUE (album_id, filename)
+            UNIQUE (album_id, filename),
             FOREIGN KEY (album_id) REFERENCES albums (id) ON DELETE CASCADE
         );
 
         CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks (album_id);
+
+        CREATE TABLE IF NOT EXISTS track_stats (
+            durable_id INTEGER PRIMARY KEY,
+            play_count INTEGER NOT NULL DEFAULT 0,
+            rating INTEGER NOT NULL DEFAULT 0
+        );
 
         COMMIT;",
     )
@@ -162,7 +169,7 @@ fn create_schema(conn: &Connection) -> Result<()> {
 /// assert!(!artists.is_empty());
 /// ```
 pub(crate) fn fetch_artist_names(conn: &Connection) -> Result<Vec<Artist>> {
-    let mut stmt = conn.prepare("SELECT id, name FROM artists ORDER BY name")?;
+    let mut stmt = conn.prepare_cached("SELECT id, name FROM artists ORDER BY name")?;
     let rows = stmt.query_map([], |row| {
         Ok(Artist {
             id: row.get(0)?,
@@ -200,7 +207,8 @@ pub(crate) fn fetch_artist_names(conn: &Connection) -> Result<Vec<Artist>> {
 /// assert!(!albums.is_empty());
 /// ```
 pub(crate) fn fetch_artist_album_titles(conn: &Connection, artist_id: i32) -> Result<Vec<Album>> {
-    let mut stmt = conn.prepare("SELECT id, title, artist_id FROM albums WHERE artist_id = ?")?;
+    let mut stmt =
+        conn.prepare_cached("SELECT id, title, artist_id FROM albums WHERE artist_id = ?")?;
     let rows = stmt.query_map([artist_id], |row| {
         Ok(Album {
             id: row.get(0)?,
@@ -240,7 +248,7 @@ pub(crate) fn fetch_artist_album_titles(conn: &Connection, artist_id: i32) -> Re
 /// assert!(!tracks.is_empty());
 /// ```
 pub fn fetch_album_tracks(conn: &Connection, album_id: i32) -> Result<Vec<Track>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         "SELECT id, track_number, title, album_id, filename
          FROM tracks
          WHERE album_id = ?
@@ -380,7 +388,7 @@ pub(crate) fn fetch_album_track_info(conn: &Connection, album_id: i32) -> Result
 /// ```
 pub(crate) fn fetch_track_info(conn: &Connection, track_id: i32) -> Result<TrackInfo> {
     let sql = "
-        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.filename
+        SELECT ar.name, al.title, tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
@@ -395,7 +403,7 @@ pub(crate) fn fetch_track_info(conn: &Connection, track_id: i32) -> Result<Track
 
 pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<TrackInfo>> {
     let mut sql = String::from("
-        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
+        SELECT ar.name, al.title, tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
@@ -405,10 +413,7 @@ pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<Track
     let mut params = Vec::new();
 
     if query.search.len() >= MIN_SEARCH_LEN {
-        filters.push(
-            "(LOWER(ar.name) LIKE ? OR LOWER(al.title) LIKE ? OR LOWER(tr.title) LIKE ?)"
-                .to_string(),
-        );
+        filters.push("(ar.name LIKE ? OR al.title LIKE ? OR tr.title LIKE ?)".to_string());
         let param = format!("%{}%", query.search);
         params.push(param.clone());
         params.push(param.clone());
@@ -416,17 +421,17 @@ pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<Track
     }
 
     if query.artist.len() >= MIN_SEARCH_LEN {
-        filters.push("(LOWER(ar.name) LIKE ?)".to_string());
+        filters.push("(ar.name LIKE ?)".to_string());
         params.push(format!("%{}%", query.artist.to_lowercase()));
     }
 
     if query.album.len() >= MIN_SEARCH_LEN {
-        filters.push("(LOWER(al.title) LIKE ?)".to_string());
+        filters.push("(al.title LIKE ?)".to_string());
         params.push(format!("%{}%", query.album.to_lowercase()));
     }
 
     if query.track.len() >= MIN_SEARCH_LEN {
-        filters.push("(LOWER(tr.title) LIKE ?)".to_string());
+        filters.push("(tr.title LIKE ?)".to_string());
         params.push(format!("%{}%", query.track.to_lowercase()));
     }
 
@@ -443,4 +448,30 @@ pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<Track
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
+}
+
+pub(crate) fn increment_play_count(conn: &Connection, durable_id: i64) -> Result<()> {
+    let sql = "
+        INSERT INTO track_stats (durable_id, play_count)
+        VALUES (?1, 1)
+        ON CONFLICT (durable_id)
+        DO UPDATE SET play_count = play_count + 1";
+
+    let mut stmt = conn.prepare_cached(sql)?;
+    stmt.execute(params![durable_id])?;
+
+    Ok(())
+}
+
+pub(crate) fn update_rating(conn: &Connection, durable_id: i64, rating: Rating) -> Result<()> {
+    let sql = "
+        INSERT INTO track_stats (durable_id, rating)
+        VALUES (?1, ?2)
+        ON CONFLICT (durable_id)
+        DO UPDATE SET rating = ?2";
+
+    let mut stmt = conn.prepare_cached(sql)?;
+    stmt.execute(params![durable_id, rating])?;
+
+    Ok(())
 }

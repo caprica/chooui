@@ -211,6 +211,17 @@ fn process_track(
         .unwrap_or_else(|| "".into());
     let track_number = tag.track();
 
+    let durable_id = xxhash_rust::xxh3::xxh3_64(
+        format!(
+            "{}|{}|{}|{}",
+            artist_name,
+            album_title,
+            track_number.unwrap_or_default(),
+            track_title
+        )
+        .as_bytes(),
+    ) as i64;
+
     let artist_id = if let Some(&id) = artist_cache.get(&artist_name) {
         id
     } else {
@@ -249,8 +260,13 @@ fn process_track(
         .context("Path contains invalid UTF-8")?
         .to_string();
     tx.execute(
-        "INSERT OR IGNORE INTO tracks (album_id, track_number, title, duration, genre, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        params![album_id, track_number, track_title, duration, genre, year, filename],
+        "INSERT OR IGNORE INTO tracks (album_id, durable_id, track_number, title, duration, genre, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        params![album_id, durable_id, track_number, track_title, duration, genre, year, filename],
+    )?;
+
+    tx.execute(
+        "DELETE FROM track_stats WHERE durable_id NOT IN (SELECT durable_id FROM tracks)",
+        [],
     )?;
 
     Ok(())
