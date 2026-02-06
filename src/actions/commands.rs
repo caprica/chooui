@@ -34,7 +34,7 @@ use crate::{
     actions::events::AppEvent,
     config::AppConfig,
     db::{self, scan},
-    model::SearchQuery,
+    model::{Rating, SearchQuery, TrackInfo},
 };
 
 const DATABASE_FILE: &str = "music.db";
@@ -53,7 +53,8 @@ pub(crate) enum AppCommand {
     AddArtistToQueue(i32),
     AddAlbumToQueue(i32),
     AddTrackToQueue(i32),
-    PlayTrack(i32),
+    PlayTrack(TrackInfo),
+    RateTrack(TrackInfo, Rating),
     ExitApplication,
 }
 
@@ -147,9 +148,17 @@ fn handle_command(
             let tracks = vec![db::fetch_track_info(&conn, track_id)?];
             event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
         }
-        AppCommand::PlayTrack(track_id) => {
-            let track = db::fetch_track_info(&conn, track_id)?;
+        AppCommand::PlayTrack(track) => {
+            let durable_id = track.durable_id;
+
             event_tx.send(AppEvent::PlayTrack(track))?;
+
+            // FIXME just integration testing here for now, probably we'd wait until after the first 5 seconds played
+            db::increment_play_count(conn, durable_id)?;
+        }
+        AppCommand::RateTrack(track, rating) => {
+            // FIXME just integration testing here for now, it should probably become a toggle
+            db::update_rating(conn, track.durable_id, rating)?;
         }
         AppCommand::ExitApplication => {
             event_tx.send(AppEvent::ExitApplication)?;
