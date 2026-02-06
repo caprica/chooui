@@ -29,7 +29,9 @@ sqllite3 ./music.db
 
 ## Early UI
 
-Very early UI screenshot, this will change drastically as development
+Very early UI screenshots, this will change drastically as development
 continues:
 
-![chooui](https://github.com/caprica/chooui/raw/master/etc/screenshot.png "chooui")
+![chooui](https://github.com/caprica/chooui/raw/master/etc/screenshot.png "chooui browser")
+
+![chooui](https://github.com/caprica/chooui/raw/master/etc/screenshot2.png "chooui search")
