@@ -27,6 +27,22 @@ To connect to the database via the command line:
 sqllite3 ./music.db
 ```
 
+## Configuration
+
+Use a configuration file in the standard place for your OS, for example on
+Linux this a file located in `~/.config/chooui` and the file name is
+`default-config.toml`.
+
+Example:
+
+```toml
+version = 1
+media_dirs = [
+	"/disks/music1",
+	"/disks/music2"
+]
+```
+
 ## Early UI
 
 Very early UI screenshots, this will change drastically as development
