@@ -17,3 +17,4 @@ serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.17"
 tui-input = "0.15.0"
 walkdir = "2.5.0"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
