@@ -228,11 +228,6 @@ impl TrackTable {
             .collect()
     }
 
-    pub(crate) fn clone_track(&self, track_id: i32) -> Option<TrackInfo> {
-        let locked = self.tracks.lock().unwrap();
-        locked.iter().find(|t| t.track_id == track_id).cloned()
-    }
-
     pub(crate) fn clone_tracks(&self, track_ids: HashSet<i32>) -> Vec<TrackInfo> {
         let locked = self.tracks.lock().unwrap();
         locked
@@ -240,5 +235,14 @@ impl TrackTable {
             .filter(|t| track_ids.contains(&t.track_id))
             .cloned()
             .collect()
+    }
+
+    pub(crate) fn clone_current(&self) -> Option<TrackInfo> {
+        if let Some(index) = self.table_state.selected() {
+            let locked = self.tracks.lock().unwrap();
+            locked.get(index).cloned()
+        } else {
+            None
+        }
     }
 }
