@@ -22,25 +22,69 @@
 use std::sync::mpsc::Sender;
 
 use anyhow::Result;
-use crossterm::event::Event;
+use crossterm::event::{Event, KeyCode, KeyEvent};
 
-use crate::{actions::events::{AppEvent, AppEventProcessor}, components::{PlaylistView, TrackTableAction}};
+use crate::{
+    actions::{commands::AppCommand, events::AppEvent},
+    components::{PlaylistView, TrackTableAction},
+    model::Rating,
+};
 
-impl AppEventProcessor for PlaylistView {
-    fn process_event(&mut self, event: Event, event_tx: &Sender<AppEvent>) -> Result<()> {
-        if self.is_active {
-            if let Some(action) = self.track_table.process_event(event) {
-                match action {
-                    TrackTableAction::ActivateCurrent(track_id) => {
-                        if let Some(track) = self.track_table.clone_track(track_id) {
-                            event_tx.send(AppEvent::PlayTrack(track))?;
-                        }
-                    }
+impl PlaylistView {
+    pub(crate) fn process_event(
+        &mut self,
+        event: Event,
+        command_tx: &Sender<AppCommand>,
+        event_tx: &Sender<AppEvent>,
+    ) -> Result<()> {
+        if !self.is_active {
+            return Ok(());
+        }
 
-                    TrackTableAction::CommitSelection(track_ids) => {
-                    }
+        if let Some(action) = self.track_table.process_event(&event) {
+            return self.handle_table_action(action, event_tx);
+        }
+
+        if let Event::Key(key) = event {
+            return self.handle_key_event(key, command_tx);
+        }
+
+        Ok(())
+    }
+
+    fn handle_table_action(
+        &self,
+        action: TrackTableAction,
+        event_tx: &Sender<AppEvent>,
+    ) -> Result<()> {
+        match action {
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn handle_key_event(&self, key: KeyEvent, command_tx: &Sender<AppCommand>) -> Result<()> {
+        match key.code {
+            KeyCode::Char(']') => {
+                if let Some(track) = self.track_table.clone_current() {
+                    command_tx.send(AppCommand::RateTrack(track, Rating::Like))?;
                 }
             }
+
+            KeyCode::Char('[') => {
+                if let Some(track) = self.track_table.clone_current() {
+                    command_tx.send(AppCommand::RateTrack(track, Rating::Dislike))?;
+                }
+            }
+
+            KeyCode::Char('p') => {
+                if let Some(track) = self.track_table.clone_current() {
+                    command_tx.send(AppCommand::PlayTrack(track))?;
+                }
+            }
+
+            _ => {}
         }
 
         Ok(())
