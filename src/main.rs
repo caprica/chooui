@@ -71,9 +71,9 @@ use crate::{
     },
     browser::MediaBrowser,
     commander::Commander,
-    components::{FavouritesView, PlaylistView, SearchView},
+    components::{CatalogView, FavouritesView, PlaylistView, SearchView},
     config::AppConfig,
-    model::{TrackInfo, queue::Queue, search::Search},
+    model::{TrackInfo, catalog::Catalog, queue::Queue, search::Search},
     player::{AudioPlayer, PlayerState},
     status::Status,
     theme::Theme,
@@ -85,6 +85,7 @@ enum MainView {
     Search,
     Favourites,
     Browse,
+    Catalog,
 }
 
 #[derive(Debug, PartialEq)]
@@ -114,10 +115,12 @@ struct App {
     pub status: Status,
     pub queue: Queue,
     pub search: Search,
+    pub catalog: Catalog,
 
     pub playlist_view: PlaylistView,
     pub search_view: SearchView,
     pub favourites_view: FavouritesView,
+    pub catalog_view: CatalogView,
 
     pub commander: Commander,
     pub media_browser: MediaBrowser,
@@ -158,9 +161,11 @@ impl App {
             status,
             queue,
             search,
+            catalog: Catalog::new(),
             playlist_view: PlaylistView::new(playlist_tracks),
             search_view: SearchView::new(search_tracks),
             favourites_view: FavouritesView::new(),
+            catalog_view: CatalogView::new(),
             commander: Commander::new(),
             media_browser: MediaBrowser::new(),
             player_state: PlayerState::Stopped,
