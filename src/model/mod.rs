@@ -19,6 +19,7 @@
 //! Artists, Albums, and Tracks—representing the underlying data schema used
 //! for metadata management and playback.
 
+pub(crate) mod catalog;
 pub(crate) mod queue;
 pub(crate) mod search;
 
@@ -47,6 +48,7 @@ pub struct Track {
 #[derive(Debug, Clone)]
 pub struct TrackInfo {
     pub track_id: i32,
+    pub durable_id: i64,
     pub track_title: String,
     pub track_number: i32,
     pub duration: i64,
@@ -57,12 +59,19 @@ pub struct TrackInfo {
     pub filename: String,
 }
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum Rating {
+    Like = 1,
+    Neutral = 0,
+    Dislike = -1,
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub(crate) struct SearchQuery {
     pub(crate) search: String,
     pub(crate) artist: String,
     pub(crate) album: String,
-    pub(crate) track: String
+    pub(crate) track: String,
 }
 
 impl SearchQuery {
