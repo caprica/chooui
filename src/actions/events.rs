@@ -127,21 +127,19 @@ pub(crate) fn process_events(
             AppEvent::Key(key) => process_key_event(app, key)?,
 
             AppEvent::Catalog(catalog_event) => {
-                let message = match catalog_event {
-                    CatalogEvent::Started => "Scanning media catalog...".to_string(),
-                    CatalogEvent::StartedDirectory(dir) => format!("Processing {}", dir),
+                match catalog_event {
+                    CatalogEvent::Started => app.catalog.prepare_scan(&app.config.media_dirs),
+                    CatalogEvent::StartedDirectory(dir) => app.catalog.begin_scan_directory(&dir),
                     CatalogEvent::ProcessedFile(count, filename) => {
-                        format!("{}: {}", count, filename)
+                        app.catalog.update_scan_directory(count)
                     }
-                    CatalogEvent::FinishedDirectory(dir) => format!("Finished processing {}", dir),
-                    CatalogEvent::Finished(count) => {
-                        format!("Finished scanning media catalog ({})", count)
-                    }
+                    CatalogEvent::FinishedDirectory(dir) => app.catalog.end_scan_directory(),
+                    CatalogEvent::Finished(count) => app.catalog.finish_scan(),
                 };
-                app.status.set_message(Some(message));
             }
 
             AppEvent::CatalogUpdated => {
+                // Ensure the browser view is updated when the catalog is updated (might change in future to just load on-demand in the browser)
                 app.command_tx.send(AppCommand::GetBrowserArtists).unwrap();
             }
 
@@ -149,20 +147,40 @@ pub(crate) fn process_events(
                 match main_view {
                     MainView::Playlist => {
                         app.playlist_view.is_active = true;
+
+                        app.catalog_view.is_active = false;
                         app.favourites_view.is_active = false;
                         app.search_view.is_active = false;
                     }
                     MainView::Search => {
                         app.search_view.is_active = true;
+
+                        app.catalog_view.is_active = false;
                         app.favourites_view.is_active = false;
                         app.playlist_view.is_active = false;
                     }
                     MainView::Favourites => {
                         app.favourites_view.is_active = true;
-                        app.search_view.is_active = false;
+
+                        app.catalog_view.is_active = false;
                         app.playlist_view.is_active = false;
+                        app.search_view.is_active = false;
                     }
-                    MainView::Browse => {}
+                    MainView::Browse => {
+                        // FIXME
+
+                        app.favourites_view.is_active = false;
+                        app.catalog_view.is_active = false;
+                        app.playlist_view.is_active = false;
+                        app.search_view.is_active = false;
+                    }
+                    MainView::Catalog => {
+                        app.catalog_view.is_active = true;
+
+                        app.favourites_view.is_active = false;
+                        app.playlist_view.is_active = false;
+                        app.search_view.is_active = false;
+                    }
                 }
                 app.main_view = main_view;
             }
@@ -286,12 +304,14 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
 
     if app.playlist_view.is_active {
         let event = Event::Key(key);
-        app.playlist_view.process_event(event, &app.event_tx)?;
+        app.playlist_view
+            .process_event(event, &app.command_tx, &app.event_tx)?;
     }
 
     if app.search_view.is_active {
         let event = Event::Key(key);
-        app.search_view.process_event(event, &app.event_tx)?;
+        app.search_view
+            .process_event(event, &app.command_tx, &app.event_tx)?;
     }
 
     process_global_key_event(app, key)?;
@@ -302,17 +322,6 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     match (key.code, key.modifiers) {
         (KeyCode::Char('q'), _) => {
             app.event_tx.send(AppEvent::ExitApplication)?;
-        }
-
-        (KeyCode::Char('s'), modifiers)
-            if modifiers == (KeyModifiers::CONTROL | KeyModifiers::ALT) =>
-        {
-            // FIXME we need to prevent multiple by using an atomic boolean
-            app.command_tx.send(AppCommand::ScanCatalog)?;
-        }
-
-        (KeyCode::Char('z'), _) => {
-            app.command_tx.send(AppCommand::ScanCatalog)?;
         }
 
         (KeyCode::Char('1'), _) => app
@@ -327,6 +336,9 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('4'), _) => app
             .command_tx
             .send(AppCommand::SetMainView(MainView::Browse))?,
+        (KeyCode::Char('5'), _) => app
+            .command_tx
+            .send(AppCommand::SetMainView(MainView::Catalog))?,
 
         // Navigation: Down / j
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => match app.media_browser.active_pane {
@@ -376,15 +388,6 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('h'), _) | (KeyCode::Left, _) => app.media_browser.previous_pane(),
         (KeyCode::Char('l'), _) | (KeyCode::Right, _) => app.media_browser.next_pane(),
 
-        // Playback controls
-        (KeyCode::Enter, _) => {
-            // if let Some(id) = app.media_browser.selected_track_id() {
-            //     if let Some(t) = app.media_browser.tracks.iter().find(|t| t.id == id) {
-            //         app.audio_player.play_file(&t.filename)?;
-            //         app.command_tx.send(AppCommand::GetNowPlaying(t.id))?;
-            //     }
-            // }
-        }
         (KeyCode::Char(','), _) => app.audio_player.seek(-FINE_SEEK_DELTA)?,
         (KeyCode::Char('.'), _) => app.audio_player.seek(FINE_SEEK_DELTA)?,
         (KeyCode::Char('<'), _) => app.audio_player.seek(-SEEK_DELTA)?,
