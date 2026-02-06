@@ -13,19 +13,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Shared UI components and state management.
-//!
-//! This module acts as a central export point for reusable interface elements,
-//! organizing complex widgets into separately maintainable sub-modules.
+//! Media catalog management view.
 
-pub(crate) mod catalog;
-pub(crate) mod favourites;
-pub(crate) mod playlist;
-pub(crate) mod search;
-pub(crate) mod track_table;
+mod event;
+mod render;
 
-pub(crate) use catalog::*;
-pub(crate) use favourites::*;
-pub(crate) use playlist::*;
-pub(crate) use search::*;
-pub(crate) use track_table::*;
+pub(crate) struct CatalogView {
+    pub(crate) is_active: bool,
+}
+
+impl CatalogView {
+    pub(crate) fn new() -> Self {
+        Self { is_active: false }
+    }
+}

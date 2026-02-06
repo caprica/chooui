@@ -13,19 +13,29 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Shared UI components and state management.
-//!
-//! This module acts as a central export point for reusable interface elements,
-//! organizing complex widgets into separately maintainable sub-modules.
+//! Event routing for the catalog view.
 
-pub(crate) mod catalog;
-pub(crate) mod favourites;
-pub(crate) mod playlist;
-pub(crate) mod search;
-pub(crate) mod track_table;
+use std::sync::mpsc::Sender;
 
-pub(crate) use catalog::*;
-pub(crate) use favourites::*;
-pub(crate) use playlist::*;
-pub(crate) use search::*;
-pub(crate) use track_table::*;
+use anyhow::Result;
+use crossterm::event::Event;
+
+use crate::{
+    actions::{commands::AppCommand, events::AppEvent},
+    components::CatalogView,
+};
+
+impl CatalogView {
+    pub(crate) fn process_event(
+        &mut self,
+        event: Event,
+        command_tx: &Sender<AppCommand>,
+        event_tx: &Sender<AppEvent>,
+    ) -> Result<()> {
+        if !self.is_active {
+            return Ok(());
+        }
+
+        Ok(())
+    }
+}
