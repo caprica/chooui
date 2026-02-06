@@ -31,9 +31,7 @@ mod player;
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, Clear, Padding, Paragraph},
+    layout::{Constraint, Direction, Layout, Rect},
 };
 
 use crate::{
@@ -88,6 +86,7 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
         crate::MainView::Search => app.search_view.draw(f, main[1], &app.search, &app.theme),
         crate::MainView::Favourites => app.favourites_view.draw(f, main[1], &app.theme),
         crate::MainView::Browse => browser::draw_browser(f, main[1], &mut app.media_browser),
+        crate::MainView::Catalog => app.catalog_view.draw(f, main[1], &app.catalog, &app.theme),
     };
 
     draw_player(f, outer[1], app);
