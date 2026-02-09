@@ -403,10 +403,14 @@ pub(crate) fn fetch_track_info(conn: &Connection, track_id: i32) -> Result<Track
 
 pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<TrackInfo>> {
     let mut sql = String::from("
-        SELECT ar.name, al.title, tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
+        SELECT
+            ar.name, al.title,
+            tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename,
+            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0)
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
+        LEFT JOIN track_stats ts ON tr.durable_id = ts.durable_id
     ");
 
     let mut filters = Vec::new();

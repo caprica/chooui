@@ -48,6 +48,8 @@ impl TrackInfo {
             year: row.get(7)?,
             genre: row.get(8)?,
             filename: row.get(9)?,
+            play_count: row.get(10)?,
+            rating: row.get(11)?,
         })
     }
 }

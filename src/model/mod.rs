@@ -57,9 +57,11 @@ pub struct TrackInfo {
     pub album_title: String,
     pub artist_name: String,
     pub filename: String,
+    pub play_count: u32,
+    pub rating: Rating,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Rating {
     Like = 1,
     Neutral = 0,
