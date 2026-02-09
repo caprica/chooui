@@ -39,7 +39,7 @@ pub(crate) fn draw_commander(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(
         Paragraph::new(commander.input.value()).style(
             Style::default()
-                .fg(app.theme.accent_colour)
+                .fg(app.theme.commander_colour)
                 .bg(app.theme.gauge_track_colour),
         ),
         container[0],
