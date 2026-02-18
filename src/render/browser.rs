@@ -19,13 +19,38 @@
 //! catalog, organised via artist, artist albums, and album tracks.
 
 use ratatui::{
-    Frame, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, widgets::{Block, Borders, List, ListItem, ListState}
+    Frame,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph},
 };
 
-use crate::browser::{MediaBrowser, MediaBrowserPane};
+use crate::{
+    browser::{MediaBrowser, MediaBrowserPane},
+    theme::Theme,
+};
+
+pub(crate) fn draw(f: &mut Frame, area: Rect, browser: &mut MediaBrowser, theme: &Theme) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .split(area);
+
+    let header_block = Block::default()
+        .borders(Borders::BOTTOM)
+        .padding(Padding::horizontal(1));
+
+    let header_text = "Media Browser";
+
+    let header = Paragraph::new(header_text).block(header_block);
+
+    draw_browser(f, chunks[1], browser);
+
+    f.render_widget(header, chunks[0]);
+}
 
 /// Renders the media browser widget including artist, album, and track info.
-pub(crate) fn draw_browser(f: &mut Frame, area: Rect, browser: &mut MediaBrowser) {
+fn draw_browser(f: &mut Frame, area: Rect, browser: &mut MediaBrowser) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -35,30 +60,51 @@ pub(crate) fn draw_browser(f: &mut Frame, area: Rect, browser: &mut MediaBrowser
         ])
         .split(area);
 
-    let artist_items: Vec<ListItem> = browser.artists
+    let artist_items: Vec<ListItem> = browser
+        .artists
         .iter()
         .map(|a| ListItem::new(a.name.as_str()))
         .collect();
 
-    render_list(f, chunks[0], " Artists ", artist_items,
-        &mut browser.artists_state, browser.active_pane == MediaBrowserPane::Artist);
+    render_list(
+        f,
+        chunks[0],
+        " Artists ",
+        artist_items,
+        &mut browser.artists_state,
+        browser.active_pane == MediaBrowserPane::Artist,
+    );
 
-    let album_items: Vec<ListItem> = browser.albums
+    let album_items: Vec<ListItem> = browser
+        .albums
         .iter()
         .map(|a| ListItem::new(a.title.as_str()))
         .collect();
 
-    render_list(f, chunks[1], " Albums ", album_items,
-        &mut browser.albums_state, browser.active_pane == MediaBrowserPane::Album);
+    render_list(
+        f,
+        chunks[1],
+        " Albums ",
+        album_items,
+        &mut browser.albums_state,
+        browser.active_pane == MediaBrowserPane::Album,
+    );
 
     let width = browser.tracks.len().to_string().len().max(2);
-    let track_items: Vec<ListItem> = browser.tracks
+    let track_items: Vec<ListItem> = browser
+        .tracks
         .iter()
         .map(|t| ListItem::new(format!("{:0width$} {}", t.track_number, t.title)))
         .collect();
 
-    render_list(f, chunks[2], " Tracks ", track_items,
-        &mut browser.tracks_state, browser.active_pane == MediaBrowserPane::Track);
+    render_list(
+        f,
+        chunks[2],
+        " Tracks ",
+        track_items,
+        &mut browser.tracks_state,
+        browser.active_pane == MediaBrowserPane::Track,
+    );
 }
 
 fn render_list(
@@ -70,16 +116,20 @@ fn render_list(
     is_active: bool,
 ) {
     let style = if is_active {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Gray)
     };
 
     let list = List::new(items)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(title)
-            .border_style(style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .border_style(style),
+        )
         .highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
         .highlight_symbol(">> ");
 

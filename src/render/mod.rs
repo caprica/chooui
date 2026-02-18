@@ -85,7 +85,7 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
         crate::MainView::Playlist => app.playlist_view.draw(f, main[1], &app.queue, &app.theme),
         crate::MainView::Search => app.search_view.draw(f, main[1], &app.search, &app.theme),
         crate::MainView::Favourites => app.favourites_view.draw(f, main[1], &app.theme),
-        crate::MainView::Browse => browser::draw_browser(f, main[1], &mut app.media_browser),
+        crate::MainView::Browse => browser::draw(f, main[1], &mut app.media_browser, &app.theme),
         crate::MainView::Catalog => app.catalog_view.draw(f, main[1], &app.catalog, &app.theme),
     };
 
