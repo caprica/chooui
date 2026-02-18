@@ -97,6 +97,13 @@ enum PlayMode {
     Playlist,
 }
 
+#[derive(Debug, PartialEq)]
+enum RepeatMode {
+    NoRepeat,
+    RepeatOne,
+    RepeatAll,
+}
+
 /// Application state.
 struct App {
     pub config: AppConfig,
@@ -110,12 +117,15 @@ struct App {
     pub command_tx: Sender<AppCommand>,
 
     pub play_mode: PlayMode,
+    pub repeat_mode: RepeatMode,
     pub audio_player: AudioPlayer,
 
     pub status: Status,
     pub queue: Queue,
     pub search: Search,
     pub catalog: Catalog,
+
+    pub current_queue_idx: Option<usize>,
 
     pub playlist_view: PlaylistView,
     pub search_view: SearchView,
@@ -157,11 +167,13 @@ impl App {
             event_rx,
             command_tx: database_tx,
             play_mode: PlayMode::PlayOne,
+            repeat_mode: RepeatMode::NoRepeat,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
             status,
             queue,
             search,
             catalog: Catalog::new(),
+            current_queue_idx: None,
             playlist_view: PlaylistView::new(playlist_tracks),
             search_view: SearchView::new(search_tracks),
             favourites_view: FavouritesView::new(),
