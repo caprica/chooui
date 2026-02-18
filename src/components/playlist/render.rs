@@ -50,7 +50,7 @@ impl PlaylistView {
         let selected_count = self.track_table.selected_count();
 
         let mut header_text = format!(
-            "Playlist | {} tracks | {}",
+            "Queue | {} tracks | {}",
             track_count,
             crate::util::format::format_time(
                 total_duration.try_into().unwrap_or_default(),
