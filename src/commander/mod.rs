@@ -26,7 +26,7 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{MainView, actions::commands::AppCommand, model::SearchQuery};
+use crate::{MainView, RepeatMode, actions::commands::AppCommand, model::SearchQuery};
 
 pub(crate) struct Commander {
     active: bool,
@@ -34,7 +34,6 @@ pub(crate) struct Commander {
 }
 
 impl Commander {
-
     pub(crate) fn new() -> Self {
         Self {
             active: false,
@@ -46,7 +45,11 @@ impl Commander {
         self.active
     }
 
-    pub(crate) fn handle_event(&mut self, event: Event, command_sender: &mut Sender<AppCommand>) -> bool {
+    pub(crate) fn handle_event(
+        &mut self,
+        event: Event,
+        command_sender: &mut Sender<AppCommand>,
+    ) -> bool {
         if self.active {
             match event {
                 Event::Key(key_event) => {
@@ -59,9 +62,10 @@ impl Commander {
                         KeyCode::Enter => {
                             let buffer = self.input.value().trim();
                             if buffer.len() > 0 {
+                                // We need to validate the command as well, and report errors
                                 let _ = self.run_command(buffer, command_sender);
                                 self.input.reset();
-                                // Exit command mode?
+                                self.active = false;
                             }
 
                             true
@@ -82,18 +86,16 @@ impl Commander {
             }
         } else {
             match event {
-                Event::Key(key_event) => {
-                    match key_event.code {
-                        KeyCode::Char(':') => {
-                            self.active = true;
-                            true
-                        }
-
-                        _ => false
+                Event::Key(key_event) => match key_event.code {
+                    KeyCode::Char(':') => {
+                        self.active = true;
+                        true
                     }
-                }
 
-                _ => false
+                    _ => false,
+                },
+
+                _ => false,
             }
         }
     }
@@ -107,6 +109,11 @@ impl Commander {
             ["scan"] => command_sender.send(AppCommand::ScanCatalog)?,
 
             ["asp"] => command_sender.send(AppCommand::AddSelectionToPlaylist)?,
+
+            // The idea is this these will find based on the currently selected item
+            ["far"] => {}
+            ["fal"] => {}
+            ["ftr"] => {}
 
             ["far", artist_parts @ ..] => {
                 if !artist_parts.is_empty() {
@@ -136,38 +143,83 @@ impl Commander {
                 }
             }
 
-            ["aaa", artist] => {} // add artist to queue
-            ["aal", album] => {}  // add album to queue
-            ["atr", track] => {}  // add track to queue
+            ["qar"] => command_sender.send(AppCommand::AddSelectedArtistToQueue)?,
+            ["qal"] => command_sender.send(AppCommand::AddSelectedAlbumToQueue)?,
+            ["qtr"] => command_sender.send(AppCommand::AddSelectedTrackToQueue)?,
 
-            ["cq"] => {}         // clear queue
+            ["qar", artist_parts @ ..] => {
+                if !artist_parts.is_empty() {
+                    let artist = artist_parts.join(" ");
+                    command_sender.send(AppCommand::AddMatchingArtistToQueue(artist))?
+                } else {
+                    // error
+                }
+            }
+            ["qal", album_parts @ ..] => {
+                if !album_parts.is_empty() {
+                    let album = album_parts.join(" ");
+                    command_sender.send(AppCommand::AddMatchingAlbumToQueue(album))?
+                } else {
+                    // error
+                }
+            }
+            ["qtr", track_parts @ ..] => {
+                if !track_parts.is_empty() {
+                    let track = track_parts.join(" ");
+                    command_sender.send(AppCommand::AddMatchingTrackToQueue(track))?
+                } else {
+                    // error
+                }
+            }
 
-            ["md"] => {}         // mode default
-            ["ms"] => {}         // mode shuffle
+            ["cq"] => {} // clear queue
 
-            ["p"] => {}          // play/pause
-            ["pn"] => {}         // play next
-            ["pp"] => {}         // play previous
+            ["md"] => {} // mode default
+            ["ms"] => {} // mode shuffle
 
-            ["v", volume] => {}  // volume set
-            ["vc", delta] => {}  // volume change by delta
-            ["vu"] => {}         // volume up
-            ["vd"] => {}         // volume down
-            ["vm"] => {}         // volume mute
+            ["p"] => {}  // play/pause
+            ["pn"] => {} // play next
+            ["pp"] => {} // play previous
 
-            ["sp"] => {}         // show player
-            ["hp"] => {}         // hide player
+            ["v", volume] => {} // volume set
+            ["vc", delta] => {} // volume change by delta
+            ["vu"] => {}        // volume up
+            ["vd"] => {}        // volume down
+            ["vm"] => {}        // volume mute
 
-            ["sq"] => {}         // show queue
-            ["hq"] => {}         // hide queue
+            ["sp"] => {} // show player
+            ["hp"] => {} // hide player
+
+            ["sq"] => {} // show queue
+            ["hq"] => {} // hide queue
+
+            ["pq"] => command_sender.send(AppCommand::PlayPlaylist)?,
 
             ["1"] => command_sender.send(AppCommand::SetMainView(MainView::Playlist))?,
             ["2"] => command_sender.send(AppCommand::SetMainView(MainView::Browse))?,
             ["3"] => command_sender.send(AppCommand::SetMainView(MainView::Search))?,
+            ["4"] => command_sender.send(AppCommand::SetMainView(MainView::Favourites))?,
+            ["5"] => command_sender.send(AppCommand::SetMainView(MainView::Catalog))?,
 
-            [] => {},            // empty (no command)
+            ["repeat", mode_str] => {
+                let mode = match mode_str.to_lowercase().as_str() {
+                    "all" => Some(RepeatMode::RepeatAll),
+                    "one" => Some(RepeatMode::RepeatOne),
+                    "none" => Some(RepeatMode::NoRepeat),
+                    _ => {
+                        println!("Invalid mode: use 'all', 'one', or 'none'");
+                        None
+                    }
+                };
 
-            [cmd, ..] => {},     // unknown command (and params)
+                if let Some(m) = mode {
+                    // set repeat mode via event/command?
+                }
+            }
+
+            [] => {} // empty (no command)
+
+            [cmd, ..] => {} // unknown command (and params)
         }
 
         Ok(())
