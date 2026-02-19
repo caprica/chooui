@@ -219,6 +219,9 @@ impl TrackTable {
         self.selection.len()
     }
 
+    // FIXME there is some confusion between the track selection (the "true" selection) and the currently selected item in the
+    //       table state, which is also called collection...
+
     pub(crate) fn clone_selected_tracks(&self) -> Vec<TrackInfo> {
         let tracks = self.tracks.lock().unwrap();
         tracks
@@ -226,6 +229,37 @@ impl TrackTable {
             .filter(|t| self.selection.contains(&t.track_id))
             .cloned()
             .collect()
+    }
+
+    // FIXME these should probably use the ids to link, not the strings, perhaps TrackInfo should have the ids...
+
+    pub(crate) fn clone_selected_artist_tracks(&self) -> Vec<TrackInfo> {
+        self.clone_selected_with(|t, selected| t.artist_name == selected.artist_name)
+    }
+
+    pub(crate) fn clone_selected_album_tracks(&self) -> Vec<TrackInfo> {
+        self.clone_selected_with(|t, selected| t.album_title == selected.album_title)
+    }
+
+    pub(crate) fn clone_selected_track(&self) -> Option<TrackInfo> {
+        // Pending...
+        None
+    }
+
+    fn clone_selected_with<F>(&self, filter_op: F) -> Vec<TrackInfo>
+    where
+        F: Fn(&TrackInfo, &TrackInfo) -> bool,
+    {
+        let tracks = self.tracks.lock().unwrap();
+
+        if let Some(selected_track) = self.table_state.selected().and_then(|i| tracks.get(i)) {
+            return tracks
+                .iter()
+                .filter(|t| filter_op(t, selected_track))
+                .cloned()
+                .collect();
+        }
+        vec![]
     }
 
     pub(crate) fn clone_tracks(&self, track_ids: HashSet<i32>) -> Vec<TrackInfo> {
