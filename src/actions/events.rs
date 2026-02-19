@@ -39,12 +39,11 @@ use ratatui::{Terminal, prelude::CrosstermBackend};
 
 use crate::{
     App, MainView, PlayMode, RepeatMode,
-    actions::commands::AppCommand,
     browser::MediaBrowserPane,
-    db,
     model::{Album, Artist, SearchQuery, Track, TrackInfo},
     player::PlayerState,
     render::draw,
+    tasks::AppTask,
 };
 
 const FINE_VOLUME_DELTA: i32 = 1;
@@ -150,7 +149,7 @@ pub(crate) fn process_events(
 
             AppEvent::CatalogUpdated => {
                 // Ensure the browser view is updated when the catalog is updated (might change in future to just load on-demand in the browser)
-                app.command_tx.send(AppCommand::GetBrowserArtists).unwrap();
+                app.task_tx.send(AppTask::GetBrowserArtists).unwrap();
             }
 
             AppEvent::SetMainView(main_view) => {
@@ -195,13 +194,12 @@ pub(crate) fn process_events(
                 app.main_view = main_view;
             }
 
-            AppEvent::NewSearchQuery(query) => app.command_tx.send(AppCommand::Search(query))?,
+            AppEvent::NewSearchQuery(query) => app.task_tx.send(AppTask::Search(query))?,
             AppEvent::SearchResultsReady(results) => {
                 app.search.set_tracks(results);
 
                 app.search_view.track_table.reset_table_selection();
-                app.command_tx
-                    .send(AppCommand::SetMainView(MainView::Search))?;
+                app.event_tx.send(AppEvent::SetMainView(MainView::Search))?;
             }
 
             AppEvent::AddSelectionToPlaylist => {
@@ -237,17 +235,17 @@ pub(crate) fn process_events(
             AppEvent::AddTracksToPlaylist(tracks) => {
                 app.queue.add_tracks(tracks);
 
-                app.command_tx
-                    .send(AppCommand::SetMainView(MainView::Playlist))?;
+                app.event_tx
+                    .send(AppEvent::SetMainView(MainView::Playlist))?;
                 app.search_view.track_table.clear_selection();
                 app.playlist_view.track_table.ensure_table_selection();
             }
 
             AppEvent::ArtistSelectionChanged(id) => {
-                app.command_tx.send(AppCommand::GetBrowserAlbums(id))?
+                app.task_tx.send(AppTask::GetBrowserAlbums(id))?
             }
             AppEvent::AlbumSelectionChanged(id) => {
-                app.command_tx.send(AppCommand::GetBrowserTracks(id))?
+                app.task_tx.send(AppTask::GetBrowserTracks(id))?
             }
             AppEvent::AddTracksToQueue(tracks) => app.queue.add_tracks(tracks),
 
@@ -398,7 +396,7 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     let event = Event::Key(key);
     let handled = app
         .commander
-        .handle_event(event.clone(), &mut app.command_tx);
+        .handle_event(event.clone(), &mut app.task_tx, &mut app.event_tx);
     if handled {
         return Ok(());
     }
@@ -406,13 +404,13 @@ fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     if app.playlist_view.is_active {
         let event = Event::Key(key);
         app.playlist_view
-            .process_event(event, &app.command_tx, &app.event_tx)?;
+            .process_event(event, &app.task_tx, &app.event_tx)?;
     }
 
     if app.search_view.is_active {
         let event = Event::Key(key);
         app.search_view
-            .process_event(event, &app.command_tx, &app.event_tx)?;
+            .process_event(event, &app.task_tx, &app.event_tx)?;
     }
 
     process_global_key_event(app, key)?;
@@ -426,20 +424,16 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         }
 
         (KeyCode::Char('1'), _) => app
-            .command_tx
-            .send(AppCommand::SetMainView(MainView::Playlist))?,
-        (KeyCode::Char('2'), _) => app
-            .command_tx
-            .send(AppCommand::SetMainView(MainView::Search))?,
+            .event_tx
+            .send(AppEvent::SetMainView(MainView::Playlist))?,
+        (KeyCode::Char('2'), _) => app.event_tx.send(AppEvent::SetMainView(MainView::Search))?,
         (KeyCode::Char('3'), _) => app
-            .command_tx
-            .send(AppCommand::SetMainView(MainView::Favourites))?,
-        (KeyCode::Char('4'), _) => app
-            .command_tx
-            .send(AppCommand::SetMainView(MainView::Browse))?,
+            .event_tx
+            .send(AppEvent::SetMainView(MainView::Favourites))?,
+        (KeyCode::Char('4'), _) => app.event_tx.send(AppEvent::SetMainView(MainView::Browse))?,
         (KeyCode::Char('5'), _) => app
-            .command_tx
-            .send(AppCommand::SetMainView(MainView::Catalog))?,
+            .event_tx
+            .send(AppEvent::SetMainView(MainView::Catalog))?,
 
         // Navigation: Down / j
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => match app.media_browser.active_pane {
@@ -505,17 +499,17 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('a'), _) => match app.media_browser.active_pane {
             MediaBrowserPane::Artist => {
                 if let Some(id) = app.media_browser.selected_artist_id() {
-                    app.command_tx.send(AppCommand::AddArtistToQueue(id))?;
+                    app.task_tx.send(AppTask::AddArtistToQueue(id))?;
                 }
             }
             MediaBrowserPane::Album => {
                 if let Some(id) = app.media_browser.selected_album_id() {
-                    app.command_tx.send(AppCommand::AddAlbumToQueue(id))?;
+                    app.task_tx.send(AppTask::AddAlbumToQueue(id))?;
                 }
             }
             MediaBrowserPane::Track => {
                 if let Some(id) = app.media_browser.selected_track_id() {
-                    app.command_tx.send(AppCommand::AddTrackToQueue(id))?;
+                    app.task_tx.send(AppTask::AddTrackToQueue(id))?;
                 }
             }
         },

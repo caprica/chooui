@@ -45,6 +45,7 @@ mod model;
 mod player;
 mod render;
 mod status;
+mod tasks;
 mod theme;
 mod util;
 
@@ -65,10 +66,7 @@ use std::{
 };
 
 use crate::{
-    actions::{
-        commands::AppCommand,
-        events::{AppEvent, process_events},
-    },
+    actions::events::{AppEvent, process_events},
     browser::MediaBrowser,
     commander::Commander,
     components::{CatalogView, FavouritesView, PlaylistView, SearchView},
@@ -76,6 +74,7 @@ use crate::{
     model::{TrackInfo, catalog::Catalog, queue::Queue, search::Search},
     player::{AudioPlayer, PlayerState},
     status::Status,
+    tasks::AppTask,
     theme::Theme,
 };
 
@@ -114,7 +113,7 @@ struct App {
     pub event_tx: Sender<AppEvent>,
     pub event_rx: Receiver<AppEvent>,
 
-    pub command_tx: Sender<AppCommand>,
+    pub task_tx: Sender<AppTask>,
 
     pub play_mode: PlayMode,
     pub repeat_mode: RepeatMode,
@@ -146,7 +145,7 @@ struct App {
 
 impl App {
     /// Create a new instance of application state.
-    pub fn new(config: AppConfig, database_tx: Sender<AppCommand>) -> Result<Self> {
+    pub fn new(config: AppConfig, task_tx: Sender<AppTask>) -> Result<Self> {
         let (event_tx, event_rx) = mpsc::channel();
 
         let audio_player_event_tx = event_tx.clone();
@@ -165,7 +164,7 @@ impl App {
             main_view: MainView::Playlist,
             event_tx,
             event_rx,
-            command_tx: database_tx,
+            task_tx,
             play_mode: PlayMode::PlayOne,
             repeat_mode: RepeatMode::NoRepeat,
             audio_player: AudioPlayer::new(audio_player_event_tx)?,
@@ -199,12 +198,12 @@ impl App {
 fn main() -> Result<()> {
     let config = config::load_config();
 
-    let (database_tx, database_rx) = mpsc::channel();
+    let (task_tx, task_rx) = mpsc::channel();
 
-    let mut app = App::new(config, database_tx).context("Failed to initalise application")?;
+    let mut app = App::new(config, task_tx).context("Failed to initalise application")?;
 
     let mut terminal = setup_terminal(&app)?;
-    let res = run(&mut terminal, &mut app, database_rx);
+    let res = run(&mut terminal, &mut app, task_rx);
     restore_terminal(&mut terminal);
 
     res.context("Application error occurred")
@@ -269,11 +268,11 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) {
 fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
-    command_rx: Receiver<AppCommand>,
+    task_rx: Receiver<AppTask>,
 ) -> Result<()> {
-    // Spawn a background worker to process application commands asynchronously.
-    let command_event_tx = app.event_tx.clone();
-    actions::commands::spawn_command_worker(&app.config, command_rx, command_event_tx);
+    // Spawn a background worker to process application tasks asynchronously.
+    let event_tx = app.event_tx.clone();
+    tasks::spawn_task_worker(&app.config, task_rx, event_tx);
 
     // Spawn a thread to translate raw key events to application events.
     let tx_keys = app.event_tx.clone();
@@ -296,7 +295,7 @@ fn run(
     });
 
     // Initial trigger to populate the media browser with data from the catalog
-    app.command_tx.send(AppCommand::GetBrowserArtists).unwrap();
+    app.task_tx.send(AppTask::GetBrowserArtists).unwrap();
 
     // Application event loop, process events until the user quits
     process_events(terminal, app)

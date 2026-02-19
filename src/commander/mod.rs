@@ -26,7 +26,12 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{MainView, RepeatMode, actions::commands::AppCommand, model::SearchQuery};
+use crate::{
+    MainView, RepeatMode,
+    actions::{commands::AppCommand, events::AppEvent},
+    model::SearchQuery,
+    tasks::AppTask,
+};
 
 pub(crate) struct Commander {
     active: bool,
@@ -48,7 +53,8 @@ impl Commander {
     pub(crate) fn handle_event(
         &mut self,
         event: Event,
-        command_sender: &mut Sender<AppCommand>,
+        task_tx: &mut Sender<AppTask>,
+        event_tx: &mut Sender<AppEvent>,
     ) -> bool {
         if self.active {
             match event {
@@ -63,7 +69,7 @@ impl Commander {
                             let buffer = self.input.value().trim();
                             if buffer.len() > 0 {
                                 // We need to validate the command as well, and report errors
-                                let _ = self.run_command(buffer, command_sender);
+                                let _ = self.run_command(buffer, task_tx, event_tx);
                                 self.input.reset();
                                 self.active = false;
                             }
@@ -100,15 +106,20 @@ impl Commander {
         }
     }
 
-    fn run_command(&self, buffer: &str, command_sender: &mut Sender<AppCommand>) -> Result<()> {
+    fn run_command(
+        &self,
+        buffer: &str,
+        task_tx: &mut Sender<AppTask>,
+        event_tx: &mut Sender<AppEvent>,
+    ) -> Result<()> {
         let parts: Vec<&str> = buffer.split_whitespace().collect();
 
         match parts.as_slice() {
-            ["q"] => command_sender.send(AppCommand::ExitApplication)?,
+            ["q"] => event_tx.send(AppEvent::ExitApplication)?,
 
-            ["scan"] => command_sender.send(AppCommand::ScanCatalog)?,
+            ["scan"] => task_tx.send(AppTask::ScanCatalog)?,
 
-            ["asp"] => command_sender.send(AppCommand::AddSelectionToPlaylist)?,
+            ["asp"] => event_tx.send(AppEvent::AddSelectionToPlaylist)?,
 
             // The idea is this these will find based on the currently selected item
             ["far"] => {}
@@ -119,7 +130,7 @@ impl Commander {
                 if !artist_parts.is_empty() {
                     let name = artist_parts.join(" ");
                     let query = SearchQuery::for_artist(name);
-                    command_sender.send(AppCommand::Search(query))?
+                    task_tx.send(AppTask::Search(query))?
                 } else {
                     // error
                 }
@@ -128,7 +139,7 @@ impl Commander {
                 if !album_parts.is_empty() {
                     let name = album_parts.join(" ");
                     let query = SearchQuery::for_album(name);
-                    command_sender.send(AppCommand::Search(query))?
+                    task_tx.send(AppTask::Search(query))?
                 } else {
                     // error
                 }
@@ -137,20 +148,20 @@ impl Commander {
                 if !track_parts.is_empty() {
                     let name = track_parts.join(" ");
                     let query = SearchQuery::for_track(name);
-                    command_sender.send(AppCommand::Search(query))?
+                    task_tx.send(AppTask::Search(query))?
                 } else {
                     // error
                 }
             }
 
-            ["qar"] => command_sender.send(AppCommand::AddSelectedArtistToQueue)?,
-            ["qal"] => command_sender.send(AppCommand::AddSelectedAlbumToQueue)?,
-            ["qtr"] => command_sender.send(AppCommand::AddSelectedTrackToQueue)?,
+            ["qar"] => event_tx.send(AppEvent::AddSelectedArtistToQueue)?,
+            ["qal"] => event_tx.send(AppEvent::AddSelectedAlbumToQueue)?,
+            ["qtr"] => event_tx.send(AppEvent::AddSelectedTrackToQueue)?,
 
             ["qar", artist_parts @ ..] => {
                 if !artist_parts.is_empty() {
                     let artist = artist_parts.join(" ");
-                    command_sender.send(AppCommand::AddMatchingArtistToQueue(artist))?
+                    task_tx.send(AppTask::AddMatchingArtistToQueue(artist))?
                 } else {
                     // error
                 }
@@ -158,7 +169,7 @@ impl Commander {
             ["qal", album_parts @ ..] => {
                 if !album_parts.is_empty() {
                     let album = album_parts.join(" ");
-                    command_sender.send(AppCommand::AddMatchingAlbumToQueue(album))?
+                    task_tx.send(AppTask::AddMatchingAlbumToQueue(album))?
                 } else {
                     // error
                 }
@@ -166,7 +177,7 @@ impl Commander {
             ["qtr", track_parts @ ..] => {
                 if !track_parts.is_empty() {
                     let track = track_parts.join(" ");
-                    command_sender.send(AppCommand::AddMatchingTrackToQueue(track))?
+                    task_tx.send(AppTask::AddMatchingTrackToQueue(track))?
                 } else {
                     // error
                 }
@@ -193,13 +204,14 @@ impl Commander {
             ["sq"] => {} // show queue
             ["hq"] => {} // hide queue
 
-            ["pq"] => command_sender.send(AppCommand::PlayPlaylist)?,
+            ["pq"] => event_tx.send(AppEvent::PlayPlaylist)?,
 
-            ["1"] => command_sender.send(AppCommand::SetMainView(MainView::Playlist))?,
-            ["2"] => command_sender.send(AppCommand::SetMainView(MainView::Browse))?,
-            ["3"] => command_sender.send(AppCommand::SetMainView(MainView::Search))?,
-            ["4"] => command_sender.send(AppCommand::SetMainView(MainView::Favourites))?,
-            ["5"] => command_sender.send(AppCommand::SetMainView(MainView::Catalog))?,
+            // maybe vq vb vs vf vc etc?
+            ["1"] => event_tx.send(AppEvent::SetMainView(MainView::Playlist))?,
+            ["2"] => event_tx.send(AppEvent::SetMainView(MainView::Browse))?,
+            ["3"] => event_tx.send(AppEvent::SetMainView(MainView::Search))?,
+            ["4"] => event_tx.send(AppEvent::SetMainView(MainView::Favourites))?,
+            ["5"] => event_tx.send(AppEvent::SetMainView(MainView::Catalog))?,
 
             ["repeat", mode_str] => {
                 let mode = match mode_str.to_lowercase().as_str() {

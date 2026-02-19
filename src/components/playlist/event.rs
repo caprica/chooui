@@ -28,13 +28,14 @@ use crate::{
     actions::{commands::AppCommand, events::AppEvent},
     components::{PlaylistView, TrackTableAction},
     model::Rating,
+    tasks::AppTask,
 };
 
 impl PlaylistView {
     pub(crate) fn process_event(
         &mut self,
         event: Event,
-        command_tx: &Sender<AppCommand>,
+        task_tx: &Sender<AppTask>,
         event_tx: &Sender<AppEvent>,
     ) -> Result<()> {
         if !self.is_active {
@@ -46,7 +47,7 @@ impl PlaylistView {
         }
 
         if let Event::Key(key) = event {
-            return self.handle_key_event(key, command_tx);
+            return self.handle_key_event(key, task_tx);
         }
 
         Ok(())
@@ -64,23 +65,23 @@ impl PlaylistView {
         Ok(())
     }
 
-    fn handle_key_event(&self, key: KeyEvent, command_tx: &Sender<AppCommand>) -> Result<()> {
+    fn handle_key_event(&self, key: KeyEvent, command_tx: &Sender<AppTask>) -> Result<()> {
         match key.code {
             KeyCode::Char(']') => {
                 if let Some(track) = self.track_table.clone_current() {
-                    command_tx.send(AppCommand::RateTrack(track, Rating::Like))?;
+                    command_tx.send(AppTask::RateTrack(track, Rating::Like))?;
                 }
             }
 
             KeyCode::Char('[') => {
                 if let Some(track) = self.track_table.clone_current() {
-                    command_tx.send(AppCommand::RateTrack(track, Rating::Dislike))?;
+                    command_tx.send(AppTask::RateTrack(track, Rating::Dislike))?;
                 }
             }
 
             KeyCode::Char('p') => {
                 if let Some(track) = self.track_table.clone_current() {
-                    command_tx.send(AppCommand::PlayTrack(track))?;
+                    command_tx.send(AppTask::PlayTrack(track))?;
                 }
             }
 
