@@ -38,6 +38,6 @@ pub(crate) const ICON_VOLUME_MEDIUM: &str = "\u{1F509}";
 pub(crate) const ICON_VOLUME_LOW: &str = "\u{1F508}";
 pub(crate) const ICON_MUTED: &str = "\u{1F507}";
 
-pub(crate) const THUMB_UP: &str = "👍";
-pub(crate) const THUMB_DOWN: &str = "👎";
-pub(crate) const FAVOURITE: &str = "❤️";
+pub(crate) const THUMB_UP: &str = "\u{1F44D}";
+pub(crate) const THUMB_DOWN: &str = "\u{1F44E}";
+pub(crate) const FAVOURITE: &str = "\u{2764}";
