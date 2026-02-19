@@ -24,7 +24,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
 use std::{
-    path::Path,
     sync::mpsc::{Receiver, Sender},
     thread,
 };
@@ -54,8 +53,16 @@ pub(crate) enum AppCommand {
     AddAlbumToQueue(i32),
     AddTrackToQueue(i32),
     PlayTrack(TrackInfo),
+
+    PlayPlaylist,
     RateTrack(TrackInfo, Rating),
     ExitApplication,
+    AddMatchingArtistToQueue(String),
+    AddMatchingAlbumToQueue(String),
+    AddMatchingTrackToQueue(String),
+    AddSelectedArtistToQueue,
+    AddSelectedAlbumToQueue,
+    AddSelectedTrackToQueue,
 }
 
 /// Spawns a background thread to process application commands.
@@ -156,6 +163,9 @@ fn handle_command(
             // FIXME just integration testing here for now, probably we'd wait until after the first 5 seconds played
             db::increment_play_count(conn, durable_id)?;
         }
+        AppCommand::PlayPlaylist => {
+            event_tx.send(AppEvent::PlayPlaylist)?;
+        }
         AppCommand::RateTrack(track, rating) => {
             // FIXME just integration testing here for now, it should probably become a toggle
             db::update_rating(conn, track.durable_id, rating)?;
@@ -163,6 +173,16 @@ fn handle_command(
         AppCommand::ExitApplication => {
             event_tx.send(AppEvent::ExitApplication)?;
         }
+
+        AppCommand::AddMatchingArtistToQueue(artist) => {}
+        AppCommand::AddMatchingAlbumToQueue(album) => {}
+        AppCommand::AddMatchingTrackToQueue(track) => {}
+
+        AppCommand::AddSelectedArtistToQueue => {
+            event_tx.send(AppEvent::AddSelectedArtistToQueue)?
+        }
+        AppCommand::AddSelectedAlbumToQueue => event_tx.send(AppEvent::AddSelectedAlbumToQueue)?,
+        AppCommand::AddSelectedTrackToQueue => event_tx.send(AppEvent::AddSelectedTrackToQueue)?,
     }
 
     Ok(())

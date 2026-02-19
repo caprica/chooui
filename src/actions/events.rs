@@ -34,13 +34,14 @@
 use std::{io::Stdout, sync::mpsc::Sender};
 
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 
 use crate::{
-    App, MainView,
+    App, MainView, PlayMode, RepeatMode,
     actions::commands::AppCommand,
     browser::MediaBrowserPane,
+    db,
     model::{Album, Artist, SearchQuery, Track, TrackInfo},
     player::PlayerState,
     render::draw,
@@ -62,6 +63,7 @@ pub(crate) enum AppEvent {
     SetMainView(MainView),
 
     PlayTrack(TrackInfo),
+    PlayPlaylist,
 
     AddTracksToPlaylist(Vec<TrackInfo>),
     AddSelectionToPlaylist,
@@ -94,6 +96,14 @@ pub(crate) enum AppEvent {
 
     Error(String),
     FatalError(String),
+
+    AddMatchingArtistToQueue(String),
+    AddMatchingAlbumToQueue(String),
+    AddMatchingTrackToQueue(String),
+
+    AddSelectedArtistToQueue,
+    AddSelectedAlbumToQueue,
+    AddSelectedTrackToQueue,
 }
 
 #[derive(Debug)]
@@ -200,9 +210,28 @@ pub(crate) fn process_events(
             }
 
             AppEvent::PlayTrack(track) => {
-                app.play_mode = crate::PlayMode::PlayOne;
+                app.play_mode = PlayMode::PlayOne;
                 app.audio_player.play_file(&track.filename)?;
                 app.now_playing = Some(track);
+            }
+
+            AppEvent::PlayPlaylist => {
+                app.play_mode = PlayMode::Playlist;
+
+                match app.current_queue_idx {
+                    Some(idx) => {}
+                    None => {
+                        let lock = app.queue.tracks();
+                        let tracks = lock.lock().unwrap();
+                        if !tracks.is_empty() {
+                            app.current_queue_idx = Some(0);
+                            if let Some(track) = tracks.get(0).cloned() {
+                                app.audio_player.play_file(&track.filename)?;
+                                app.now_playing = Some(track);
+                            }
+                        }
+                    }
+                }
             }
 
             AppEvent::AddTracksToPlaylist(tracks) => {
@@ -250,7 +279,46 @@ pub(crate) fn process_events(
             AppEvent::TitleChanged(title) => app.player_track_name = Some(title),
             AppEvent::DurationChanged(dur) => app.player_duration = Some(dur),
             AppEvent::VolumeChanged(vol) => app.volume = Some(vol),
-            AppEvent::TrackFinished => app.player_time = app.player_duration,
+
+            AppEvent::TrackFinished => {
+                app.player_time = app.player_duration;
+
+                if app.play_mode == PlayMode::Playlist {
+                    let lock = app.queue.tracks();
+                    let tracks = lock.lock().unwrap();
+                    let total_tracks = tracks.len();
+
+                    if total_tracks == 0 {
+                        app.current_queue_idx = None;
+                        return Ok(());
+                    }
+
+                    if let Some(idx) = app.current_queue_idx.as_mut() {
+                        if app.repeat_mode == RepeatMode::RepeatOne {
+                            // nothing
+                        } else {
+                            let next_idx = *idx + 1;
+                            if next_idx < total_tracks {
+                                *idx = next_idx;
+                            } else if app.repeat_mode == RepeatMode::RepeatAll {
+                                *idx = 0;
+                            } else {
+                                app.current_queue_idx = None;
+                            }
+                        }
+
+                        if let Some(valid_idx) = app.current_queue_idx {
+                            if let Some(track) = tracks.get(valid_idx) {
+                                app.audio_player.play_file(&track.filename)?;
+                                app.now_playing = Some((*track).clone());
+                            }
+                        } else {
+                            app.now_playing = None;
+                        }
+                    }
+                }
+            }
+
             AppEvent::TimeChanged(seconds) => {
                 app.player_time = Some(seconds as u64);
                 if let Some(duration) = app.player_duration {
@@ -261,7 +329,40 @@ pub(crate) fn process_events(
                     };
                 }
             }
-            AppEvent::Tick => {}
+            AppEvent::Tick => {} // _ => {}
+
+            AppEvent::AddSelectedArtistToQueue => match app.main_view {
+                MainView::Search => {
+                    let tracks = app.search_view.track_table.clone_selected_artist_tracks();
+                    app.queue.add_tracks(tracks);
+                }
+                MainView::Favourites => {}
+                MainView::Browse => {}
+                _ => {}
+            },
+
+            AppEvent::AddSelectedAlbumToQueue => match app.main_view {
+                MainView::Search => {
+                    let tracks = app.search_view.track_table.clone_selected_album_tracks();
+                    app.queue.add_tracks(tracks);
+                }
+                MainView::Favourites => {}
+                MainView::Browse => {}
+                _ => {}
+            },
+
+            AppEvent::AddSelectedTrackToQueue => match app.main_view {
+                MainView::Search => {
+                    if let Some(track) = app.search_view.track_table.clone_selected_track() {
+                        let tracks = vec![track];
+                        app.queue.add_tracks(tracks);
+                    }
+                }
+                MainView::Favourites => {}
+                MainView::Browse => {}
+                _ => {}
+            },
+
             _ => {}
         }
 
@@ -418,7 +519,13 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
                 }
             }
         },
-        (KeyCode::Char('c'), _) => app.queue.clear(),
+
+        (KeyCode::Char('c'), _) => {
+            // Clear the queue and current index, but if the audio is playing
+            // keep it playing
+            app.queue.clear();
+            app.current_queue_idx = None;
+        }
 
         _ => {}
     }
