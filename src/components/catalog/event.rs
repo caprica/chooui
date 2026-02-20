@@ -20,13 +20,13 @@ use std::sync::mpsc::Sender;
 use anyhow::Result;
 use crossterm::event::Event;
 
-use crate::{actions::events::AppEvent, components::CatalogView};
+use crate::{actions::events::AppEvent, components::CatalogView, tasks::AppTask};
 
 impl CatalogView {
     pub(crate) fn process_event(
         &mut self,
         event: Event,
-        command_tx: &Sender<AppCommand>,
+        command_tx: &Sender<AppTask>,
         event_tx: &Sender<AppEvent>,
     ) -> Result<()> {
         if !self.is_active {
