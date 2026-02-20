@@ -163,7 +163,7 @@ pub(crate) fn process_events(
             AppEvent::AddSelectedAlbumToQueue => handle_add_selected_album_to_queue(app),
             AppEvent::AddSelectedTrackToQueue => handle_add_selected_track_to_queue(app),
             AppEvent::ClearQueue => handle_clear_queue(app),
-            AppEvent::Tick | _ => {}
+            AppEvent::Tick | _ => handle_tick(app),
         }
 
         terminal.draw(|f| draw(f, app))?;
