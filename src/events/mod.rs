@@ -117,10 +117,6 @@ pub(crate) enum CatalogEvent {
     Finished(i64),
 }
 
-pub(crate) trait AppEventProcessor {
-    fn process_event(&mut self, event: Event, event_tx: &Sender<AppEvent>) -> Result<()>;
-}
-
 /// Runs the main application loop, handling events and rendering the UI in the
 /// terminal.
 ///
