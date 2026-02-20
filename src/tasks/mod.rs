@@ -25,6 +25,9 @@
 //! to process, should be implemented as tasks. Other actions are likely more
 //! suited to by events.
 
+mod handlers;
+use handlers::*;
+
 use anyhow::Result;
 use rusqlite::Connection;
 use std::{
@@ -34,14 +37,12 @@ use std::{
 
 use crate::{
     config::AppConfig,
-    db::{self, scan},
+    db::{self},
     events::AppEvent,
     model::{Rating, SearchQuery, TrackInfo},
 };
 
 const DATABASE_FILE: &str = "music.db";
-
-const MIN_SEARCH_LEN: usize = 3;
 
 #[derive(Debug)]
 pub(crate) enum AppTask {
@@ -62,6 +63,14 @@ pub(crate) enum AppTask {
 
     PlayTrack(TrackInfo),
     RateTrack(TrackInfo, Rating),
+}
+
+/// Bundles shared resources required by task handlers to simplify resource
+/// passing when invoking those handler functions.
+struct TaskContext<'a> {
+    config: &'a AppConfig,
+    event_tx: &'a Sender<AppEvent>,
+    conn: &'a mut Connection,
 }
 
 /// Spawns a background thread to process application tasks.
@@ -98,14 +107,6 @@ pub(crate) fn spawn_task_worker(
     });
 }
 
-/// Bundles shared resources required by task handlers to simplify resource
-/// passing when invoking those handler functions.
-struct TaskContext<'a> {
-    config: &'a AppConfig,
-    event_tx: &'a Sender<AppEvent>,
-    conn: &'a mut Connection,
-}
-
 /// Orchestrates the execution of a single task.
 ///
 /// This function implements the logic for each task and sends the result back
@@ -130,89 +131,4 @@ fn handle_task(task: AppTask, ctx: &mut TaskContext) -> Result<()> {
         AppTask::PlayTrack(track) => play_track(ctx, track),
         AppTask::RateTrack(track, rating) => rate_track(ctx, track, rating),
     }
-}
-
-fn scan_catalog(ctx: &mut TaskContext) -> Result<()> {
-    ctx.event_tx.send(AppEvent::SetBrowserArtists(vec![]))?;
-    ctx.event_tx.send(AppEvent::SetBrowserAlbums(vec![]))?;
-    ctx.event_tx.send(AppEvent::SetBrowserTracks(vec![]))?;
-
-    let music_dirs = &ctx.config.media_dirs;
-    scan::process_music_library(ctx.conn, music_dirs, ctx.event_tx)
-        .expect("failed to process catalog");
-
-    ctx.event_tx.send(AppEvent::CatalogUpdated)?;
-
-    Ok(())
-}
-
-fn search(ctx: &mut TaskContext, query: SearchQuery) -> Result<()> {
-    let can_search = query.search.len() >= MIN_SEARCH_LEN
-        || query.artist.len() >= MIN_SEARCH_LEN
-        || query.album.len() >= MIN_SEARCH_LEN
-        || query.track.len() >= MIN_SEARCH_LEN;
-
-    if can_search {
-        let search_results = db::search(ctx.conn, &query)?;
-        ctx.event_tx
-            .send(AppEvent::SearchResultsReady(search_results))?;
-    }
-
-    Ok(())
-}
-
-fn get_browser_artists(ctx: &mut TaskContext) -> Result<()> {
-    let artists = db::fetch_artist_names(ctx.conn)?;
-    ctx.event_tx.send(AppEvent::SetBrowserArtists(artists))?;
-
-    Ok(())
-}
-
-fn get_browser_albums(ctx: &mut TaskContext, artist_id: i32) -> Result<()> {
-    let albums = db::fetch_artist_album_titles(ctx.conn, artist_id)?;
-    ctx.event_tx.send(AppEvent::SetBrowserAlbums(albums))?;
-
-    Ok(())
-}
-
-fn get_browser_tracks(ctx: &mut TaskContext, album_id: i32) -> Result<()> {
-    let tracks = db::fetch_album_tracks(ctx.conn, album_id)?;
-    ctx.event_tx.send(AppEvent::SetBrowserTracks(tracks))?;
-
-    Ok(())
-}
-
-fn add_artist_to_queue(ctx: &mut TaskContext, artist_id: i32) -> Result<()> {
-    let tracks = db::fetch_artist_trackinfo(ctx.conn, artist_id)?;
-    ctx.event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
-
-    Ok(())
-}
-
-fn add_album_to_queue(ctx: &mut TaskContext, album_id: i32) -> Result<()> {
-    let tracks = db::fetch_album_track_info(ctx.conn, album_id)?;
-    ctx.event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
-
-    Ok(())
-}
-
-fn add_track_to_queue(ctx: &mut TaskContext, track_id: i32) -> Result<()> {
-    let tracks = vec![db::fetch_track_info(ctx.conn, track_id)?];
-    ctx.event_tx.send(AppEvent::AddTracksToQueue(tracks))?;
-
-    Ok(())
-}
-
-fn play_track(ctx: &mut TaskContext, track: TrackInfo) -> Result<()> {
-    let durable_id = track.durable_id;
-    ctx.event_tx.send(AppEvent::PlayTrack(track))?;
-    db::increment_play_count(ctx.conn, durable_id)?;
-
-    Ok(())
-}
-
-fn rate_track(ctx: &mut TaskContext, track: TrackInfo, rating: Rating) -> Result<()> {
-    db::update_rating(ctx.conn, track.durable_id, rating)?;
-
-    Ok(())
 }
