@@ -26,7 +26,7 @@ use std::sync::mpsc;
 
 use anyhow::Result;
 
-use crate::{actions::events::AppEvent, player::commands::AudioPlayerCommand};
+use crate::{events::AppEvent, player::commands::AudioPlayerCommand};
 
 /// Represents the current playback status of the audio engine.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -78,7 +78,8 @@ impl AudioPlayer {
     /// * `filename` - The path to the audio file on disk.
     ///
     pub(crate) fn play_file(&self, filename: &str) -> Result<()> {
-        self.command_tx.send(AudioPlayerCommand::PlayFile(filename.to_string()))?;
+        self.command_tx
+            .send(AudioPlayerCommand::PlayFile(filename.to_string()))?;
         Ok(())
     }
 
@@ -100,7 +101,8 @@ impl AudioPlayer {
     ///
     /// * `delta` - The amount to change the volume (positive or negative).
     pub(crate) fn adjust_volume(&self, delta: i32) -> Result<()> {
-        self.command_tx.send(AudioPlayerCommand::AdjustVolume(delta))?;
+        self.command_tx
+            .send(AudioPlayerCommand::AdjustVolume(delta))?;
         Ok(())
     }
 

@@ -48,7 +48,7 @@ use std::{
 };
 use walkdir::WalkDir;
 
-use crate::actions::events::{AppEvent, CatalogEvent};
+use crate::events::{AppEvent, CatalogEvent};
 
 /// Recursively scans a directory for MP3 files and synchronizes the database.
 ///

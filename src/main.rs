@@ -35,12 +35,12 @@
 //! between the UI and background workers is handled via `std::sync::mpsc`
 //! channels.
 
-mod actions;
 mod browser;
 mod commander;
 mod components;
 mod config;
 mod db;
+mod events;
 mod model;
 mod player;
 mod render;
@@ -66,11 +66,11 @@ use std::{
 };
 
 use crate::{
-    actions::events::{AppEvent, process_events},
     browser::MediaBrowser,
     commander::Commander,
     components::{CatalogView, FavouritesView, PlaylistView, SearchView},
     config::AppConfig,
+    events::{AppEvent, process_events},
     model::{TrackInfo, catalog::Catalog, queue::Queue, search::Search},
     player::{AudioPlayer, PlayerState},
     status::Status,

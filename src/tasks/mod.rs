@@ -33,9 +33,9 @@ use std::{
 };
 
 use crate::{
-    actions::events::AppEvent,
     config::AppConfig,
     db::{self, scan},
+    events::AppEvent,
     model::{Rating, SearchQuery, TrackInfo},
 };
 

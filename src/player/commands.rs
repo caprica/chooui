@@ -30,11 +30,17 @@
 
 // TODO consider splitting this into commands/events like elsewhere?
 
-use std::{sync::mpsc::{self, Receiver, Sender}, thread};
 use anyhow::{Context, Result};
 use mpv::Format;
+use std::{
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+};
 
-use crate::{actions::events::AppEvent, player::{AudioPlayer, PlayerState}};
+use crate::{
+    events::AppEvent,
+    player::{AudioPlayer, PlayerState},
+};
 
 #[derive(Debug)]
 pub(crate) enum AudioPlayerCommand {
@@ -87,19 +93,36 @@ pub(crate) fn spawn_player_worker(
 ///
 /// Returns an error if the MPV context fails to initialize or if the internal
 /// command/event loops encounter an unrecoverable failure.
-fn audio_player_worker(command_rx: Receiver<AudioPlayerCommand>, event_tx: Sender<AppEvent>) -> Result<()> {
+fn audio_player_worker(
+    command_rx: Receiver<AudioPlayerCommand>,
+    event_tx: Sender<AppEvent>,
+) -> Result<()> {
     let mut handler = (|| {
         let mut builder = mpv::MpvHandlerBuilder::new().context("Failed to create MPV builder")?;
-        builder.set_option("vo", "null").context("Failed to set no video output")?;
+        builder
+            .set_option("vo", "null")
+            .context("Failed to set no video output")?;
         builder.build().context("Failed to build MPV handler")
     })()?;
 
-    handler.observe_property::<&str>("media-title", 0).context("Failed to observe media-title")?;
-    handler.observe_property::<f64>("duration", 0).context("Failed to observe duration")?;
-    handler.observe_property::<bool>("pause", 0).context("Failed to observe pause")?;
-    handler.observe_property::<f64>("time-pos", 0).context("Failed to observe time-pos")?;
-    handler.observe_property::<f64>("volume", 0).context("Failed to observe volume")?;
-    handler.observe_property::<f64>("idle-active", 0).context("Failed to observe idle-active")?;
+    handler
+        .observe_property::<&str>("media-title", 0)
+        .context("Failed to observe media-title")?;
+    handler
+        .observe_property::<f64>("duration", 0)
+        .context("Failed to observe duration")?;
+    handler
+        .observe_property::<bool>("pause", 0)
+        .context("Failed to observe pause")?;
+    handler
+        .observe_property::<f64>("time-pos", 0)
+        .context("Failed to observe time-pos")?;
+    handler
+        .observe_property::<f64>("volume", 0)
+        .context("Failed to observe volume")?;
+    handler
+        .observe_property::<f64>("idle-active", 0)
+        .context("Failed to observe idle-active")?;
 
     let mut is_paused = false;
     let mut is_idle = true;
@@ -108,7 +131,13 @@ fn audio_player_worker(command_rx: Receiver<AudioPlayerCommand>, event_tx: Sende
 
     loop {
         process_commands(&mut handler, &command_rx)?;
-        process_mpv_events(&mut handler, &mut is_paused, &mut is_idle, &mut player_state, &event_tx)?;
+        process_mpv_events(
+            &mut handler,
+            &mut is_paused,
+            &mut is_idle,
+            &mut player_state,
+            &event_tx,
+        )?;
     }
 }
 
@@ -120,7 +149,9 @@ fn process_commands(
     while let Ok(command) = command_rx.try_recv() {
         match command {
             AudioPlayerCommand::PlayFile(filename) => {
-                handler.command(&["loadfile", &filename, "replace"]).context(format!("Failed to load file: {}", &filename))?;
+                handler
+                    .command(&["loadfile", &filename, "replace"])
+                    .context(format!("Failed to load file: {}", &filename))?;
                 handler.set_property("pause", false)?;
             }
             AudioPlayerCommand::TogglePause => {
@@ -149,34 +180,38 @@ fn process_commands(
 /// This function waits for up to 50ms for an event from the MPV context.
 /// If an event occurs, it updates internal flags and broadcasts any necessary
 /// [`AppEvent`]s to the UI.
-fn process_mpv_events(handler: &mut mpv::MpvHandler, is_paused: &mut bool, is_idle: &mut bool, current_state: &mut PlayerState, event_tx: &mpsc::Sender<AppEvent>) -> Result<()> {
+fn process_mpv_events(
+    handler: &mut mpv::MpvHandler,
+    is_paused: &mut bool,
+    is_idle: &mut bool,
+    current_state: &mut PlayerState,
+    event_tx: &mpsc::Sender<AppEvent>,
+) -> Result<()> {
     if let Some(mpv_event) = handler.wait_event(0.05) {
         let app_event = match mpv_event {
-            mpv::Event::PropertyChange { name, change, .. } => {
-                match (name, change) {
-                    ("media-title", Format::Str(title)) => {
-                        Some(AppEvent::TitleChanged(title.to_string()))
-                    }
-                    ("duration", Format::Double(duration)) => {
-                        Some(AppEvent::DurationChanged(duration as u64))
-                    }
-                    ("pause", Format::Flag(pause)) => {
-                        *is_paused = pause;
-                        None
-                    }
-                    ("time-pos", Format::Double(seconds)) if seconds >= 0.0 => {
-                        Some(AppEvent::TimeChanged(seconds))
-                    }
-                    ("volume", Format::Double(volume)) => {
-                        Some(AppEvent::VolumeChanged(volume.round() as u32))
-                    }
-                    ("idle-active", Format::Flag(idle_active)) => {
-                        *is_idle = idle_active;
-                        None
-                    }
-                    _ => None,
+            mpv::Event::PropertyChange { name, change, .. } => match (name, change) {
+                ("media-title", Format::Str(title)) => {
+                    Some(AppEvent::TitleChanged(title.to_string()))
                 }
-            }
+                ("duration", Format::Double(duration)) => {
+                    Some(AppEvent::DurationChanged(duration as u64))
+                }
+                ("pause", Format::Flag(pause)) => {
+                    *is_paused = pause;
+                    None
+                }
+                ("time-pos", Format::Double(seconds)) if seconds >= 0.0 => {
+                    Some(AppEvent::TimeChanged(seconds))
+                }
+                ("volume", Format::Double(volume)) => {
+                    Some(AppEvent::VolumeChanged(volume.round() as u32))
+                }
+                ("idle-active", Format::Flag(idle_active)) => {
+                    *is_idle = idle_active;
+                    None
+                }
+                _ => None,
+            },
             mpv::Event::EndFile(result) => {
                 if let Ok(reason) = result {
                     match reason {
@@ -196,7 +231,9 @@ fn process_mpv_events(handler: &mut mpv::MpvHandler, is_paused: &mut bool, is_id
 
         if new_player_state != *current_state {
             *current_state = new_player_state;
-            event_tx.send(AppEvent::PlayerStateChanged(new_player_state)).context("Failed to send player state event")?;
+            event_tx
+                .send(AppEvent::PlayerStateChanged(new_player_state))
+                .context("Failed to send player state event")?;
         }
 
         if let Some(event) = app_event {
