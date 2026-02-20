@@ -178,7 +178,7 @@ impl Commander {
                 }
             }
 
-            ["cq"] => {} // clear queue
+            ["cq"] => event_tx.send(AppEvent::ClearQueue)?,
 
             ["md"] => {} // mode default
             ["ms"] => {} // mode shuffle

@@ -103,6 +103,8 @@ pub(crate) enum AppEvent {
     AddSelectedArtistToQueue,
     AddSelectedAlbumToQueue,
     AddSelectedTrackToQueue,
+
+    ClearQueue,
 }
 
 #[derive(Debug)]
@@ -360,6 +362,11 @@ pub(crate) fn process_events(
                 MainView::Browse => {}
                 _ => {}
             },
+
+            AppEvent::ClearQueue => {
+                app.current_queue_idx = None;
+                app.queue.clear();
+            }
 
             _ => {}
         }
