@@ -20,10 +20,7 @@ use std::sync::mpsc::Sender;
 use anyhow::Result;
 use crossterm::event::Event;
 
-use crate::{
-    actions::{commands::AppCommand, events::AppEvent},
-    components::CatalogView,
-};
+use crate::{actions::events::AppEvent, components::CatalogView};
 
 impl CatalogView {
     pub(crate) fn process_event(

@@ -26,12 +26,7 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{
-    MainView, RepeatMode,
-    actions::{commands::AppCommand, events::AppEvent},
-    model::SearchQuery,
-    tasks::AppTask,
-};
+use crate::{MainView, RepeatMode, actions::events::AppEvent, model::SearchQuery, tasks::AppTask};
 
 pub(crate) struct Commander {
     active: bool,

@@ -29,5 +29,4 @@
 //! All public members of sub-modules are re-exported at this level for
 //! convenient access.
 
-pub(crate) mod commands;
 pub(crate) mod events;

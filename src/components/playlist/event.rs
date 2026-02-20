@@ -25,7 +25,7 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 
 use crate::{
-    actions::{commands::AppCommand, events::AppEvent},
+    actions::events::AppEvent,
     components::{PlaylistView, TrackTableAction},
     model::Rating,
     tasks::AppTask,
