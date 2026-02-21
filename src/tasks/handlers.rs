@@ -30,8 +30,10 @@ pub(super) fn scan_catalog(ctx: &mut TaskContext) -> Result<()> {
     ctx.event_tx.send(AppEvent::SetBrowserTracks(vec![]))?;
 
     let music_dirs = &ctx.config.media_dirs;
-    scan::process_music_library(ctx.conn, music_dirs, ctx.event_tx)
-        .expect("failed to process catalog");
+
+    if let Err(e) = scan::process_music_library(ctx.conn, music_dirs, ctx.event_tx) {
+        eprintln!("Failure processing catalog: {:#}", e);
+    }
 
     ctx.event_tx.send(AppEvent::CatalogUpdated)?;
 

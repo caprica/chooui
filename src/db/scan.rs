@@ -35,13 +35,16 @@
 //! is used during processing to minimize redundant database lookups for
 //! existing artist and album entries.
 
-use anyhow::{Context, Result};
-use lofty::prelude::*;
+use anyhow::{Context, Result, anyhow};
+use lofty::config::ParsingMode;
 use lofty::probe::Probe;
 use lofty::tag::ItemKey;
+use lofty::{config::ParseOptions, prelude::*};
 use rusqlite::{Connection, Transaction, params};
 use std::{
     collections::HashMap,
+    fs::OpenOptions,
+    io::Write,
     path::Path,
     sync::mpsc::Sender,
     time::{Duration, Instant},
@@ -96,6 +99,12 @@ pub(crate) fn process_music_library(
     let mut last_update = Instant::now();
     let update_interval = Duration::from_millis(100);
 
+    let mut error_log = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open("scan_log.txt")?;
+
     for root in paths {
         event_tx.send(AppEvent::Catalog(CatalogEvent::StartedDirectory(
             root.to_string(),
@@ -112,8 +121,16 @@ pub(crate) fn process_music_library(
         {
             let path = entry.path();
 
-            process_track(&tx, path, &mut artist_cache, &mut album_cache)?;
+            let track_result = process_track(&tx, path, &mut artist_cache, &mut album_cache);
+            if let Err(e) = track_result {
+                // let log_entry = format!("{} | {:#}\n", path.display(), e);
+                // let log_entry = format!("{} | {:?}\n", path.display(), e);
+                let log_entry = format!("{} | {:#}\n", path.display(), e);
 
+                if let Err(write_err) = error_log.write_all(log_entry.as_bytes()) {
+                    eprintln!("Critical: Could not write to error log file: {}", write_err);
+                }
+            }
             count += 1;
 
             if last_update.elapsed() >= update_interval {
@@ -135,19 +152,6 @@ pub(crate) fn process_music_library(
         )))?;
     }
 
-    for entry in paths.iter().flat_map(|root| {
-        WalkDir::new(root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .map_or(false, |ext| ext.to_ascii_lowercase() == "mp3")
-            })
-    }) {
-        process_track(&tx, entry.path(), &mut artist_cache, &mut album_cache)?;
-    }
-
     tx.commit().context("Failed to commit transaction")?;
 
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM tracks", [], |row| row.get(0))?;
@@ -163,27 +167,17 @@ fn process_track(
     artist_cache: &mut HashMap<String, i64>,
     album_cache: &mut HashMap<(i64, String), i64>,
 ) -> Result<()> {
-    let tagged_file = match Probe::open(path).and_then(|p| p.read()) {
-        Ok(file) => file,
-        Err(e) => {
-            eprintln!("Skipping {:?}: {}", path, e);
-            return Ok(());
-        }
-    };
+    let options = ParseOptions::new().parsing_mode(ParsingMode::Relaxed);
 
-    let tag = match tagged_file
+    let tagged_file = Probe::open(path)?.options(options).read()?;
+
+    let tag = tagged_file
         .primary_tag()
         .or_else(|| tagged_file.first_tag())
-    {
-        Some(t) => t,
-        None => {
-            println!("Skipping (no tags): {}", path.display());
-            return Ok(());
-        }
-    };
+        .ok_or_else(|| anyhow!("No tags found in file"))?;
 
     let artist_name = tag
-        .get(&ItemKey::AlbumArtist)
+        .get(ItemKey::AlbumArtist)
         .and_then(|item| item.value().text())
         .map(|s| s.to_string())
         .unwrap_or_else(|| {
@@ -203,7 +197,7 @@ fn process_track(
             .unwrap_or_else(|| "Unknown Track".into())
     });
 
-    let year = tag.year();
+    let year = tag.date().map(|ts| ts.year);
     let duration = i64::try_from(tagged_file.properties().duration().as_secs()).unwrap_or(-1);
     let genre = tag
         .genre()
