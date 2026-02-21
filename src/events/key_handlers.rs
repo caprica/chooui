@@ -30,7 +30,6 @@
 //! convenient access.
 
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyEvent};
 
 use crate::{App, MainView, browser::MediaBrowserPane, events::AppEvent, tasks::AppTask};
 
@@ -40,158 +39,118 @@ const VOLUME_DELTA: i32 = 5;
 const FINE_SEEK_DELTA: i32 = 5;
 const SEEK_DELTA: i32 = 20;
 
-/// Maps keyboard input to application actions and playback commands.
-///
-/// This function acts as the primary input router for the TUI, translating
-/// low-level [`KeyEvent`]s into high-level domain logic. It handles:
-///
-/// * **Application Control**: Life-cycle events like exiting the program.
-/// * **Navigation**: Moving between artists, albums, and tracks in the media
-///   browser.
-/// * **Playback**: Controlling the audio engine (play, pause, seek, volume).
-/// * **Library Management**: Adding items to the playback queue or clearing
-///   it.
-///
-/// # Arguments
-///
-/// * `app` - A mutable reference to the application state.
-/// * `key` - The key event captured from the terminal backend.
-///
-/// # Errors
-///
-/// Returns an error if a command fails to send to a background worker or if
-/// a requested action cannot be executed.
-pub(super) fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
-    let event = Event::Key(key);
-    let handled = app
-        .commander
-        .handle_event(event.clone(), &mut app.task_tx, &mut app.event_tx);
-    if handled {
-        return Ok(());
-    }
-
-    if app.playlist_view.is_active {
-        let event = Event::Key(key);
-        app.playlist_view
-            .process_event(event, &app.task_tx, &app.event_tx)?;
-    }
-
-    if app.search_view.is_active {
-        let event = Event::Key(key);
-        app.search_view
-            .process_event(event, &app.task_tx, &app.event_tx)?;
-    }
-
-    process_global_key_event(app, key)?;
+pub(super) fn exit_application(app: &mut App) -> Result<()> {
+    app.event_tx.send(AppEvent::ExitApplication)?;
     Ok(())
 }
 
-fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
-    match (key.code, key.modifiers) {
-        (KeyCode::Char('q'), _) => {
-            app.event_tx.send(AppEvent::ExitApplication)?;
-        }
-
-        (KeyCode::Char('1'), _) => app
-            .event_tx
-            .send(AppEvent::SetMainView(MainView::Playlist))?,
-        (KeyCode::Char('2'), _) => app.event_tx.send(AppEvent::SetMainView(MainView::Search))?,
-        (KeyCode::Char('3'), _) => app
-            .event_tx
-            .send(AppEvent::SetMainView(MainView::Favourites))?,
-        (KeyCode::Char('4'), _) => app.event_tx.send(AppEvent::SetMainView(MainView::Browse))?,
-        (KeyCode::Char('5'), _) => app
-            .event_tx
-            .send(AppEvent::SetMainView(MainView::Catalog))?,
-
-        // Navigation: Down / j
-        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => match app.media_browser.active_pane {
-            MediaBrowserPane::Artist => {
-                app.media_browser.next_artist();
-                if let Some(id) = app.media_browser.selected_artist_id() {
-                    app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
-                }
-            }
-            MediaBrowserPane::Album => {
-                app.media_browser.next_album();
-                if let Some(id) = app.media_browser.selected_album_id() {
-                    app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
-                }
-            }
-            MediaBrowserPane::Track => {
-                app.media_browser.next_track();
-                if let Some(id) = app.media_browser.selected_track_id() {
-                    app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
-                }
-            }
-        },
-
-        // Navigation: Up / k
-        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => match app.media_browser.active_pane {
-            MediaBrowserPane::Artist => {
-                app.media_browser.previous_artist();
-                if let Some(id) = app.media_browser.selected_artist_id() {
-                    app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
-                }
-            }
-            MediaBrowserPane::Album => {
-                app.media_browser.previous_album();
-                if let Some(id) = app.media_browser.selected_album_id() {
-                    app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
-                }
-            }
-            MediaBrowserPane::Track => {
-                app.media_browser.previous_track();
-                if let Some(id) = app.media_browser.selected_track_id() {
-                    app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
-                }
-            }
-        },
-
-        // Pane Navigation
-        (KeyCode::Char('h'), _) | (KeyCode::Left, _) => app.media_browser.previous_pane(),
-        (KeyCode::Char('l'), _) | (KeyCode::Right, _) => app.media_browser.next_pane(),
-
-        (KeyCode::Char(','), _) => app.audio_player.seek(-FINE_SEEK_DELTA)?,
-        (KeyCode::Char('.'), _) => app.audio_player.seek(FINE_SEEK_DELTA)?,
-        (KeyCode::Char('<'), _) => app.audio_player.seek(-SEEK_DELTA)?,
-        (KeyCode::Char('>'), _) => app.audio_player.seek(SEEK_DELTA)?,
-        (KeyCode::Char(' '), _) => app.audio_player.toggle_pause()?,
-        (KeyCode::Char('s'), _) => app.audio_player.stop()?,
-        (KeyCode::Char('-'), _) => app.audio_player.adjust_volume(-FINE_VOLUME_DELTA)?,
-        (KeyCode::Char('='), _) => app.audio_player.adjust_volume(FINE_VOLUME_DELTA)?,
-        (KeyCode::Char('_'), _) => app.audio_player.adjust_volume(-VOLUME_DELTA)?,
-        (KeyCode::Char('+'), _) => app.audio_player.adjust_volume(VOLUME_DELTA)?,
-        (KeyCode::Char('m'), _) => app.audio_player.toggle_mute()?,
-
-        // Queue Management
-        (KeyCode::Char('a'), _) => match app.media_browser.active_pane {
-            MediaBrowserPane::Artist => {
-                if let Some(id) = app.media_browser.selected_artist_id() {
-                    app.task_tx.send(AppTask::AddArtistToQueue(id))?;
-                }
-            }
-            MediaBrowserPane::Album => {
-                if let Some(id) = app.media_browser.selected_album_id() {
-                    app.task_tx.send(AppTask::AddAlbumToQueue(id))?;
-                }
-            }
-            MediaBrowserPane::Track => {
-                if let Some(id) = app.media_browser.selected_track_id() {
-                    app.task_tx.send(AppTask::AddTrackToQueue(id))?;
-                }
-            }
-        },
-
-        (KeyCode::Char('c'), _) => {
-            // Clear the queue and current index, but if the audio is playing
-            // keep it playing
-            app.queue.clear();
-            app.current_queue_idx = None;
-        }
-
-        _ => {}
-    }
-
+pub(super) fn set_view(app: &mut App, view: MainView) -> Result<()> {
+    app.event_tx.send(AppEvent::SetMainView(view))?;
     Ok(())
+}
+
+pub(super) fn move_selection(app: &mut App, direction: i8) -> Result<()> {
+    match app.media_browser.active_pane {
+        MediaBrowserPane::Artist => {
+            if direction > 0 {
+                app.media_browser.next_artist()
+            } else {
+                app.media_browser.previous_artist()
+            };
+            if let Some(id) = app.media_browser.selected_artist_id() {
+                app.event_tx.send(AppEvent::ArtistSelectionChanged(id))?;
+            }
+        }
+        MediaBrowserPane::Album => {
+            if direction > 0 {
+                app.media_browser.next_album()
+            } else {
+                app.media_browser.previous_album()
+            };
+            if let Some(id) = app.media_browser.selected_album_id() {
+                app.event_tx.send(AppEvent::AlbumSelectionChanged(id))?;
+            }
+        }
+        MediaBrowserPane::Track => {
+            if direction > 0 {
+                app.media_browser.next_track()
+            } else {
+                app.media_browser.previous_track()
+            };
+            if let Some(id) = app.media_browser.selected_track_id() {
+                app.event_tx.send(AppEvent::TrackSelectionChanged(id))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn seek_fine(app: &mut App, forward: bool) -> Result<()> {
+    let delta = if forward {
+        FINE_SEEK_DELTA
+    } else {
+        -FINE_SEEK_DELTA
+    };
+    app.audio_player.seek(delta)
+}
+
+pub(super) fn seek_coarse(app: &mut App, forward: bool) -> Result<()> {
+    let delta = if forward { SEEK_DELTA } else { -SEEK_DELTA };
+    app.audio_player.seek(delta)
+}
+
+pub(super) fn adjust_volume_fine(app: &mut App, increase: bool) -> Result<()> {
+    let delta = if increase {
+        FINE_VOLUME_DELTA
+    } else {
+        -FINE_VOLUME_DELTA
+    };
+    app.audio_player.adjust_volume(delta)
+}
+
+pub(super) fn adjust_volume_coarse(app: &mut App, increase: bool) -> Result<()> {
+    let delta = if increase {
+        VOLUME_DELTA
+    } else {
+        -VOLUME_DELTA
+    };
+    app.audio_player.adjust_volume(delta)
+}
+
+pub(super) fn toggle_playback(app: &mut App) -> Result<()> {
+    app.audio_player.toggle_pause()
+}
+
+pub(super) fn stop_playback(app: &mut App) -> Result<()> {
+    app.audio_player.stop()
+}
+
+pub(super) fn toggle_mute(app: &mut App) -> Result<()> {
+    app.audio_player.toggle_mute()
+}
+
+pub(super) fn add_selected_to_queue(app: &mut App) -> Result<()> {
+    let task = match app.media_browser.active_pane {
+        MediaBrowserPane::Artist => app
+            .media_browser
+            .selected_artist_id()
+            .map(AppTask::AddArtistToQueue),
+        MediaBrowserPane::Album => app
+            .media_browser
+            .selected_album_id()
+            .map(AppTask::AddAlbumToQueue),
+        MediaBrowserPane::Track => app
+            .media_browser
+            .selected_track_id()
+            .map(AppTask::AddTrackToQueue),
+    };
+    if let Some(t) = task {
+        app.task_tx.send(t)?;
+    }
+    Ok(())
+}
+
+pub(super) fn clear_queue(app: &mut App) {
+    app.queue.clear();
+    app.current_queue_idx = None;
 }

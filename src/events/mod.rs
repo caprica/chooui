@@ -38,7 +38,7 @@ use key_handlers::*;
 use std::io::Stdout;
 
 use anyhow::Result;
-use crossterm::event::KeyEvent;
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 
 use crate::{
@@ -159,5 +159,98 @@ pub(crate) fn process_events(
 
         terminal.draw(|f| draw(f, app))?;
     }
+    Ok(())
+}
+
+/// Maps keyboard input to application actions and playback commands.
+///
+/// This function acts as the primary input router for the TUI, translating
+/// low-level [`KeyEvent`]s into high-level domain logic. It handles:
+///
+/// * **Application Control**: Life-cycle events like exiting the program.
+/// * **Navigation**: Moving between artists, albums, and tracks in the media
+///   browser.
+/// * **Playback**: Controlling the audio engine (play, pause, seek, volume).
+/// * **Library Management**: Adding items to the playback queue or clearing
+///   it.
+///
+/// # Arguments
+///
+/// * `app` - A mutable reference to the application state.
+/// * `key` - The key event captured from the terminal backend.
+///
+/// # Errors
+///
+/// Returns an error if a command fails to send to a background worker or if
+/// a requested action cannot be executed.
+pub(super) fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
+    let event = Event::Key(key);
+    let handled = app
+        .commander
+        .handle_event(event.clone(), &mut app.task_tx, &mut app.event_tx);
+    if handled {
+        return Ok(());
+    }
+
+    if app.playlist_view.is_active {
+        let event = Event::Key(key);
+        app.playlist_view
+            .process_event(event, &app.task_tx, &app.event_tx)?;
+    }
+
+    if app.search_view.is_active {
+        let event = Event::Key(key);
+        app.search_view
+            .process_event(event, &app.task_tx, &app.event_tx)?;
+    }
+
+    process_global_key_event(app, key)?;
+
+    Ok(())
+}
+
+fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
+    match (key.code, key.modifiers) {
+        (KeyCode::Char('q'), _) => exit_application(app)?,
+
+        // View Navigation
+        (KeyCode::Char('1'), _) => set_view(app, MainView::Playlist)?,
+        (KeyCode::Char('2'), _) => set_view(app, MainView::Search)?,
+        (KeyCode::Char('3'), _) => set_view(app, MainView::Favourites)?,
+        (KeyCode::Char('4'), _) => set_view(app, MainView::Browse)?,
+        (KeyCode::Char('5'), _) => set_view(app, MainView::Catalog)?,
+
+        // Browser Navigation
+        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => move_selection(app, 1)?,
+        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => move_selection(app, -1)?,
+        (KeyCode::Char('h'), _) | (KeyCode::Left, _) => app.media_browser.previous_pane(),
+        (KeyCode::Char('l'), _) | (KeyCode::Right, _) => app.media_browser.next_pane(),
+
+        // Audio: Seeking
+        (KeyCode::Char(','), _) => seek_fine(app, false)?,
+        (KeyCode::Char('.'), _) => seek_fine(app, true)?,
+        (KeyCode::Char('<'), _) => seek_coarse(app, false)?,
+        (KeyCode::Char('>'), _) => seek_coarse(app, true)?,
+
+        // Audio: Playback
+        (KeyCode::Char(' '), _) => toggle_playback(app)?,
+        (KeyCode::Char('s'), _) => stop_playback(app)?,
+        (KeyCode::Char('m'), _) => toggle_mute(app)?,
+
+        // Audio: Volume
+        (KeyCode::Char('-'), _) => adjust_volume_fine(app, false)?,
+        (KeyCode::Char('='), _) => adjust_volume_fine(app, true)?,
+        (KeyCode::Char('_'), _) => adjust_volume_coarse(app, false)?,
+        (KeyCode::Char('+'), _) => adjust_volume_coarse(app, true)?,
+
+        // Queue Management
+        (KeyCode::Char('a'), _) => add_selected_to_queue(app)?,
+        (KeyCode::Char('c'), _) => {
+            clear_queue(app);
+        }
+
+        _ => {}
+    }
+
     Ok(())
 }
