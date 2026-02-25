@@ -121,6 +121,14 @@ impl Queue {
         self.played_duration
     }
 
+    pub(crate) fn track_updated(&self, track: &TrackInfo) {
+        let mut tracks = self.tracks.lock().unwrap();
+
+        if let Some(existing_track) = tracks.iter_mut().find(|t| t.track_id == track.track_id) {
+            *existing_track = track.clone();
+        }
+    }
+
     fn sync_tracks(&mut self) {
         let mut locked_tracks = self.tracks.lock().unwrap();
         locked_tracks.clear();

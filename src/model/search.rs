@@ -41,4 +41,12 @@ impl Search {
     pub(crate) fn tracks(&self) -> Arc<Mutex<Vec<TrackInfo>>> {
         Arc::clone(&self.tracks)
     }
+
+    pub(crate) fn track_updated(&self, track: &TrackInfo) {
+        let mut tracks = self.tracks.lock().unwrap();
+
+        if let Some(existing_track) = tracks.iter_mut().find(|t| t.track_id == track.track_id) {
+            *existing_track = track.clone();
+        }
+    }
 }
