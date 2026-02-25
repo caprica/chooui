@@ -27,7 +27,16 @@ use ratatui::{
     widgets::{Block, Cell, Row, Table},
 };
 
-use crate::{components::TrackTable, render::Render, theme::Theme, util::format::TimeFormat};
+use crate::{
+    components::TrackTable,
+    model::Rating,
+    render::{
+        Render,
+        icons::{ICON_DISLIKE, ICON_FAVOURITE, ICON_LIKE},
+    },
+    theme::Theme,
+    util::format::TimeFormat,
+};
 
 const RESERVED_ROWS: usize = 2;
 
@@ -52,6 +61,20 @@ impl TrackTable {
             let time = crate::util::format::format_time(duration, TimeFormat::Minutes);
             let year = item.year.map(|y| y.to_string()).unwrap_or_default();
             let track_number = format!("{:02}", item.track_number);
+            let play_count = match item.play_count {
+                0 => "".to_string(),
+                _ => item.play_count.to_string(),
+            };
+            let rating = match item.rating {
+                Rating::Like => ICON_LIKE,
+                Rating::Neutral => "",
+                Rating::Dislike => ICON_DISLIKE,
+            };
+            let rating_colour = match item.rating {
+                Rating::Like => theme.rating_like_fg,
+                Rating::Neutral => theme.rating_neutral_fg,
+                Rating::Dislike => theme.rating_dislike_fg,
+            };
 
             Row::new(vec![
                 Cell::from(selection_indicator),
@@ -79,6 +102,12 @@ impl TrackTable {
                     Line::from(item.track_title.as_str())
                         .style(Style::default().fg(theme.table_track_fg)),
                 ),
+                Cell::from(
+                    Line::from(play_count)
+                        .style(Style::default().fg(theme.table_track_fg))
+                        .alignment(Alignment::Right),
+                ),
+                Cell::from(Line::from(rating).style(Style::default().fg(rating_colour))),
             ])
         });
 
@@ -93,6 +122,8 @@ impl TrackTable {
                 Constraint::Fill(25),
                 Constraint::Length(5),
                 Constraint::Fill(55),
+                Constraint::Length(3),
+                Constraint::Length(1),
             ],
         )
         .header(
@@ -105,6 +136,8 @@ impl TrackTable {
                 Cell::from("Album"),
                 Cell::from(Line::from("Track").alignment(Alignment::Right)),
                 Cell::from("Title"),
+                Cell::from(Line::from("#").alignment(Alignment::Right)),
+                Cell::from(ICON_FAVOURITE),
             ])
             .style(
                 ratatui::style::Style::default()
