@@ -454,28 +454,32 @@ pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<Track
     Ok(results)
 }
 
-pub(crate) fn increment_play_count(conn: &Connection, durable_id: i64) -> Result<()> {
+pub(crate) fn increment_play_count(conn: &Connection, durable_id: i64) -> Result<i64> {
     let sql = "
         INSERT INTO track_stats (durable_id, play_count)
         VALUES (?1, 1)
         ON CONFLICT (durable_id)
-        DO UPDATE SET play_count = play_count + 1";
+        DO UPDATE SET play_count = play_count + 1
+        RETURNING play_count
+    ";
 
     let mut stmt = conn.prepare_cached(sql)?;
-    stmt.execute(params![durable_id])?;
+    let new_count: i64 = stmt.query_row(params![durable_id], |row| row.get(0))?;
 
-    Ok(())
+    Ok(new_count)
 }
 
-pub(crate) fn update_rating(conn: &Connection, durable_id: i64, rating: Rating) -> Result<()> {
+pub(crate) fn update_rating(conn: &Connection, durable_id: i64, rating: Rating) -> Result<Rating> {
     let sql = "
         INSERT INTO track_stats (durable_id, rating)
         VALUES (?1, ?2)
         ON CONFLICT (durable_id)
-        DO UPDATE SET rating = ?2";
+        DO UPDATE SET rating = ?2
+        RETURNING rating
+    ";
 
     let mut stmt = conn.prepare_cached(sql)?;
-    stmt.execute(params![durable_id, rating])?;
+    let new_rating: Rating = stmt.query_row(params![durable_id, rating], |row| row.get(0))?;
 
-    Ok(())
+    Ok(new_rating)
 }
