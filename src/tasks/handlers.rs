@@ -97,16 +97,25 @@ pub(super) fn add_track_to_queue(ctx: &mut TaskContext, track_id: i32) -> Result
     Ok(())
 }
 
-pub(super) fn play_track(ctx: &mut TaskContext, track: TrackInfo) -> Result<()> {
+pub(super) fn play_track(ctx: &mut TaskContext, mut track: TrackInfo) -> Result<()> {
     let durable_id = track.durable_id;
-    ctx.event_tx.send(AppEvent::PlayTrack(track))?;
-    db::increment_play_count(ctx.conn, durable_id)?;
+    ctx.event_tx.send(AppEvent::PlayTrack(track.clone()))?;
+
+    let new_count = db::increment_play_count(ctx.conn, durable_id)?;
+    track.play_count = u32::try_from(new_count).unwrap_or(u32::MAX);
+    ctx.event_tx.send(AppEvent::TrackUpdated(track))?;
 
     Ok(())
 }
 
-pub(super) fn rate_track(ctx: &mut TaskContext, track: TrackInfo, rating: Rating) -> Result<()> {
-    db::update_rating(ctx.conn, track.durable_id, rating)?;
+pub(super) fn rate_track(
+    ctx: &mut TaskContext,
+    mut track: TrackInfo,
+    rating: Rating,
+) -> Result<()> {
+    let new_rating = db::update_rating(ctx.conn, track.durable_id, rating)?;
+    track.rating = new_rating;
+    ctx.event_tx.send(AppEvent::TrackUpdated(track))?;
 
     Ok(())
 }
