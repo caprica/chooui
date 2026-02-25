@@ -101,6 +101,8 @@ pub(crate) enum AppEvent {
     AddSelectedTrackToQueue,
 
     ClearQueue,
+
+    TrackUpdated(TrackInfo),
 }
 
 #[derive(Debug)]
@@ -154,6 +156,7 @@ pub(crate) fn process_events(
             AppEvent::AddSelectedAlbumToQueue => handle_add_selected_album_to_queue(app),
             AppEvent::AddSelectedTrackToQueue => handle_add_selected_track_to_queue(app),
             AppEvent::ClearQueue => handle_clear_queue(app),
+            AppEvent::TrackUpdated(track) => handle_track_updated(app, track),
             AppEvent::Tick | _ => handle_tick(app),
         }
 

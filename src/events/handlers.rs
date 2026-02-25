@@ -258,3 +258,8 @@ pub(super) fn handle_clear_queue(app: &mut App) {
     app.current_queue_idx = None;
     app.queue.clear();
 }
+
+pub(super) fn handle_track_updated(app: &mut App, track: TrackInfo) {
+    app.queue.track_updated(&track);
+    app.search.track_updated(&track);
+}
