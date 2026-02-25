@@ -26,7 +26,7 @@
 
 mod browser;
 mod commander;
-mod icons;
+pub mod icons;
 mod player;
 
 use ratatui::{
