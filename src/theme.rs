@@ -36,6 +36,10 @@ pub(crate) struct Theme {
     pub(crate) table_album_fg: Color,
     pub(crate) table_track_number_fg: Color,
     pub(crate) table_track_fg: Color,
+
+    pub(crate) rating_like_fg: Color,
+    pub(crate) rating_dislike_fg: Color,
+    pub(crate) rating_neutral_fg: Color,
 }
 
 impl Default for Theme {
@@ -62,6 +66,10 @@ impl Theme {
             table_album_fg: Color::Rgb(179, 157, 219),
             table_track_number_fg: Color::Rgb(162, 161, 166),
             table_track_fg: Color::Rgb(255, 255, 255),
+
+            rating_like_fg: Color::Rgb(0, 255, 0),
+            rating_dislike_fg: Color::Rgb(255, 0, 0),
+            rating_neutral_fg: Color::Rgb(162, 161, 166),
         }
     }
 
