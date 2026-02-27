@@ -241,9 +241,11 @@ impl TrackTable {
         self.clone_selected_with(|t, selected| t.album_title == selected.album_title)
     }
 
+    // See earlier FIXME, this is the "highlighted" track, not the selection as such
     pub(crate) fn clone_selected_track(&self) -> Option<TrackInfo> {
-        // Pending...
-        None
+        let selected = self.table_state.selected()?;
+        let tracks = self.tracks.lock().unwrap();
+        tracks.get(selected).cloned()
     }
 
     fn clone_selected_with<F>(&self, filter_op: F) -> Vec<TrackInfo>

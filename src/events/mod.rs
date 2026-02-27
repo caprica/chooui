@@ -96,6 +96,9 @@ pub(crate) enum AppEvent {
     AddMatchingAlbumToQueue(String),
     AddMatchingTrackToQueue(String),
 
+    FindSelectedArtist,
+    FindSelectedAlbum,
+
     AddSelectedArtistToQueue,
     AddSelectedAlbumToQueue,
     AddSelectedTrackToQueue,
@@ -152,6 +155,8 @@ pub(crate) fn process_events(
             AppEvent::VolumeChanged(volume) => handle_volume_changed(app, volume),
             AppEvent::TrackFinished => handle_track_finished(app)?,
             AppEvent::TimeChanged(secs) => handle_time_changed(app, secs),
+            AppEvent::FindSelectedArtist => handle_find_selected_artist(app)?,
+            AppEvent::FindSelectedAlbum => handle_find_selected_album(app)?,
             AppEvent::AddSelectedArtistToQueue => handle_add_selected_artist_to_queue(app),
             AppEvent::AddSelectedAlbumToQueue => handle_add_selected_album_to_queue(app),
             AppEvent::AddSelectedTrackToQueue => handle_add_selected_track_to_queue(app),

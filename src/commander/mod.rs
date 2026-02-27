@@ -117,8 +117,8 @@ impl Commander {
             ["asp"] => event_tx.send(AppEvent::AddSelectionToPlaylist)?,
 
             // The idea is this these will find based on the currently selected item
-            ["far"] => {}
-            ["fal"] => {}
+            ["far"] => event_tx.send(AppEvent::FindSelectedArtist)?,
+            ["fal"] => event_tx.send(AppEvent::FindSelectedAlbum)?,
             ["ftr"] => {}
 
             ["far", artist_parts @ ..] => {

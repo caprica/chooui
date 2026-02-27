@@ -223,6 +223,36 @@ pub(super) fn handle_time_changed(app: &mut App, seconds: f64) {
 
 pub(super) fn handle_tick(_app: &mut App) {}
 
+pub(super) fn handle_find_selected_artist(app: &mut App) -> Result<()> {
+    match app.main_view {
+        MainView::Search => {
+            if let Some(track) = app.search_view.track_table.clone_selected_track() {
+                let artist = track.artist_name;
+                let query = SearchQuery::for_artist(artist);
+                app.task_tx.send(AppTask::Search(query))?;
+            }
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+pub(super) fn handle_find_selected_album(app: &mut App) -> Result<()> {
+    match app.main_view {
+        MainView::Search => {
+            if let Some(track) = app.search_view.track_table.clone_selected_track() {
+                let album = track.album_title;
+                let query = SearchQuery::for_album(album);
+                app.task_tx.send(AppTask::Search(query))?;
+            }
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 pub(super) fn handle_add_selected_artist_to_queue(app: &mut App) {
     match app.main_view {
         MainView::Search => {
