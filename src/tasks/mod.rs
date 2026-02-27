@@ -124,9 +124,9 @@ fn handle_task(task: AppTask, ctx: &mut TaskContext) -> Result<()> {
         AppTask::AddArtistToQueue(id) => add_artist_to_queue(ctx, id),
         AppTask::AddAlbumToQueue(id) => add_album_to_queue(ctx, id),
         AppTask::AddTrackToQueue(id) => add_track_to_queue(ctx, id),
-        AppTask::AddMatchingArtistToQueue(artist) => Ok(()),
-        AppTask::AddMatchingAlbumToQueue(album) => Ok(()),
-        AppTask::AddMatchingTrackToQueue(track) => Ok(()),
+        AppTask::AddMatchingArtistToQueue(artist) => add_matching_artist_to_queue(ctx, artist),
+        AppTask::AddMatchingAlbumToQueue(album) => add_matching_album_to_queue(ctx, album),
+        AppTask::AddMatchingTrackToQueue(track) => add_matching_track_to_queue(ctx, track),
 
         AppTask::PlayTrack(track) => play_track(ctx, track),
         AppTask::RateTrack(track, rating) => rate_track(ctx, track, rating),
