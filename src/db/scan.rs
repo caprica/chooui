@@ -94,7 +94,7 @@ pub(crate) fn process_music_library(
         [],
     )?;
 
-    let mut count = 0;
+    let mut total_count = 0;
 
     let mut last_update = Instant::now();
     let update_interval = Duration::from_millis(100);
@@ -106,6 +106,8 @@ pub(crate) fn process_music_library(
         .open("scan_log.txt")?;
 
     for root in paths {
+        let mut path_count = 0;
+
         event_tx.send(AppEvent::Catalog(CatalogEvent::StartedDirectory(
             root.to_string(),
         )))?;
@@ -131,7 +133,7 @@ pub(crate) fn process_music_library(
                     eprintln!("Critical: Could not write to error log file: {}", write_err);
                 }
             }
-            count += 1;
+            path_count += 1;
 
             if last_update.elapsed() >= update_interval {
                 let filename = path
@@ -140,7 +142,7 @@ pub(crate) fn process_music_library(
                     .unwrap_or_else(|| "Unknown".into());
 
                 let _ = event_tx.send(AppEvent::Catalog(CatalogEvent::ProcessedFile(
-                    count, filename,
+                    path_count, filename,
                 )));
 
                 last_update = Instant::now();
@@ -156,7 +158,7 @@ pub(crate) fn process_music_library(
 
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM tracks", [], |row| row.get(0))?;
 
-    event_tx.send(AppEvent::Catalog(CatalogEvent::Finished(count)))?;
+    event_tx.send(AppEvent::Catalog(CatalogEvent::Finished(total_count)))?;
 
     Ok(count)
 }
