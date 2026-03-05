@@ -87,8 +87,7 @@ pub(super) fn handle_play_playlist(app: &mut App) -> Result<()> {
         if !tracks.is_empty() {
             app.current_queue_idx = Some(0);
             if let Some(track) = tracks.get(0).cloned() {
-                app.audio_player.play_file(&track.filename)?;
-                app.now_playing = Some(track);
+                app.task_tx.send(AppTask::PlayTrack(track))?;
             }
         }
     }
@@ -197,12 +196,20 @@ pub(super) fn handle_track_finished(app: &mut App) -> Result<()> {
             }
 
             if let Some(valid_idx) = app.current_queue_idx {
-                if let Some(track) = tracks.get(valid_idx) {
-                    app.audio_player.play_file(&track.filename)?;
-                    app.now_playing = Some((*track).clone());
+                if let Some(track) = tracks.get(valid_idx).cloned() {
+                    app.task_tx.send(AppTask::PlayTrack(track))?;
                 }
             } else {
                 app.now_playing = None;
+            }
+        }
+    } else if app.play_mode == PlayMode::PlayOne {
+        if let Some(track) = app.now_playing.clone() {
+            match app.repeat_mode {
+                RepeatMode::NoRepeat => {}
+                RepeatMode::RepeatOne | RepeatMode::RepeatAll => {
+                    app.task_tx.send(AppTask::PlayTrack(track))?;
+                }
             }
         }
     }
@@ -287,6 +294,10 @@ pub(super) fn handle_add_selected_track_to_queue(app: &mut App) {
 pub(super) fn handle_clear_queue(app: &mut App) {
     app.current_queue_idx = None;
     app.queue.clear();
+}
+
+pub(super) fn handle_set_repeat_mode(app: &mut App, mode: RepeatMode) {
+    app.repeat_mode = mode;
 }
 
 pub(super) fn handle_track_updated(app: &mut App, track: TrackInfo) {
