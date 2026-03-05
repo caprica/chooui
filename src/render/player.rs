@@ -124,8 +124,24 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
 
     let control_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(26)])
+        .constraints([
+            Constraint::Length(12),
+            Constraint::Min(0),
+            Constraint::Length(26),
+        ])
         .split(chunks[2]);
+
+    let repeat_text = match app.repeat_mode {
+        crate::RepeatMode::NoRepeat => "No Repeat",
+        crate::RepeatMode::RepeatOne => "Repeat 1",
+        crate::RepeatMode::RepeatAll => "Repeat All",
+    };
+
+    let repeat_label = Paragraph::new(repeat_text)
+        .alignment(Alignment::Left)
+        .fg(Color::White);
+
+    f.render_widget(repeat_label, control_chunks[0]);
 
     let volume = app.volume.unwrap_or(0);
     let vol_ratio = (volume as f64 / 130.0).clamp(0.0, 1.0);
@@ -133,7 +149,7 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
     let volume_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(0), Constraint::Length(5)])
-        .split(control_chunks[1]);
+        .split(control_chunks[2]);
 
     let volume_gauge = Gauge::default()
         .gauge_style(
