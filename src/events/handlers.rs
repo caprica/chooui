@@ -72,7 +72,7 @@ pub(super) fn handle_add_selection_to_playlist(app: &mut App) {
 }
 
 pub(super) fn handle_play_track(app: &mut App, track: TrackInfo) -> Result<()> {
-    app.play_mode = PlayMode::PlayOne;
+    // app.play_mode = PlayMode::PlayOne;
     app.audio_player.play_file(&track.filename)?;
     app.now_playing = Some(track);
 
