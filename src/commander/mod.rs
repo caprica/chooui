@@ -183,6 +183,10 @@ impl Commander {
             ["md"] => {} // mode default
             ["ms"] => {} // mode shuffle
 
+            ["r0"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::NoRepeat))?,
+            ["r1"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatOne))?,
+            ["ra"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatAll))?,
+
             ["p"] => {}  // play/pause
             ["pn"] => {} // play next
             ["pp"] => {} // play previous

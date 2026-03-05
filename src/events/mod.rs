@@ -42,7 +42,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{Terminal, prelude::CrosstermBackend};
 
 use crate::{
-    App, MainView,
+    App, MainView, RepeatMode,
     model::{Album, Artist, SearchQuery, Track, TrackInfo},
     player::PlayerState,
     render::draw,
@@ -105,6 +105,8 @@ pub(crate) enum AppEvent {
 
     ClearQueue,
 
+    SetRepeatMode(RepeatMode),
+
     TrackUpdated(TrackInfo),
 }
 
@@ -161,6 +163,7 @@ pub(crate) fn process_events(
             AppEvent::AddSelectedAlbumToQueue => handle_add_selected_album_to_queue(app),
             AppEvent::AddSelectedTrackToQueue => handle_add_selected_track_to_queue(app),
             AppEvent::ClearQueue => handle_clear_queue(app),
+            AppEvent::SetRepeatMode(mode) => handle_set_repeat_mode(app, mode),
             AppEvent::TrackUpdated(track) => handle_track_updated(app, track),
             AppEvent::Tick | _ => handle_tick(app),
         }
