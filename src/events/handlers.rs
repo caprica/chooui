@@ -95,6 +95,12 @@ pub(super) fn handle_play_playlist(app: &mut App) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn handle_shuffle_queue(app: &mut App) -> Result<()> {
+    app.queue.shuffle();
+
+    Ok(())
+}
+
 pub(super) fn handle_add_tracks_to_playlist(app: &mut App, tracks: Vec<TrackInfo>) -> Result<()> {
     app.queue.add_tracks(tracks);
     app.event_tx
