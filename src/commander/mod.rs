@@ -183,6 +183,8 @@ impl Commander {
             ["md"] => {} // mode default
             ["ms"] => {} // mode shuffle
 
+            ["sq"] => event_tx.send(AppEvent::ShuffleQueue)?,
+
             ["r0"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::NoRepeat))?,
             ["r1"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatOne))?,
             ["ra"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatAll))?,
@@ -200,7 +202,7 @@ impl Commander {
             ["sp"] => {} // show player
             ["hp"] => {} // hide player
 
-            ["sq"] => {} // show queue
+            // ["sq"] => {} // show queue
             ["hq"] => {} // hide queue
 
             ["pq"] => event_tx.send(AppEvent::PlayPlaylist)?,
@@ -210,7 +212,8 @@ impl Commander {
             ["2"] => event_tx.send(AppEvent::SetMainView(MainView::Browse))?,
             ["3"] => event_tx.send(AppEvent::SetMainView(MainView::Search))?,
             ["4"] => event_tx.send(AppEvent::SetMainView(MainView::Favourites))?,
-            ["5"] => event_tx.send(AppEvent::SetMainView(MainView::Catalog))?,
+            ["5"] => event_tx.send(AppEvent::SetMainView(MainView::Equalizer))?,
+            ["6"] => event_tx.send(AppEvent::SetMainView(MainView::Catalog))?,
 
             ["repeat", mode_str] => {
                 let mode = match mode_str.to_lowercase().as_str() {
