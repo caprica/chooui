@@ -20,6 +20,7 @@
 //! for metadata management and playback.
 
 pub(crate) mod catalog;
+pub(crate) mod equalizer;
 pub(crate) mod queue;
 pub(crate) mod search;
 

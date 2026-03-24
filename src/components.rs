@@ -19,12 +19,14 @@
 //! organizing complex widgets into separately maintainable sub-modules.
 
 pub(crate) mod catalog;
+pub(crate) mod equalizer;
 pub(crate) mod favourites;
 pub(crate) mod playlist;
 pub(crate) mod search;
 pub(crate) mod track_table;
 
 pub(crate) use catalog::*;
+pub(crate) use equalizer::*;
 pub(crate) use favourites::*;
 pub(crate) use playlist::*;
 pub(crate) use search::*;

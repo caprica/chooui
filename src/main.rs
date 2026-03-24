@@ -68,10 +68,10 @@ use std::{
 use crate::{
     browser::MediaBrowser,
     commander::Commander,
-    components::{CatalogView, FavouritesView, PlaylistView, SearchView},
+    components::{CatalogView, EqualizerView, FavouritesView, PlaylistView, SearchView},
     config::AppConfig,
     events::{AppEvent, process_events},
-    model::{TrackInfo, catalog::Catalog, queue::Queue, search::Search},
+    model::{TrackInfo, catalog::Catalog, equalizer::Equalizer, queue::Queue, search::Search},
     player::{AudioPlayer, PlayerState},
     status::Status,
     tasks::AppTask,
@@ -84,6 +84,7 @@ enum MainView {
     Search,
     Favourites,
     Browse,
+    Equalizer,
     Catalog,
 }
 
@@ -122,6 +123,7 @@ struct App {
     pub status: Status,
     pub queue: Queue,
     pub search: Search,
+    pub equalizer: Equalizer,
     pub catalog: Catalog,
 
     pub current_queue_idx: Option<usize>,
@@ -129,6 +131,7 @@ struct App {
     pub playlist_view: PlaylistView,
     pub search_view: SearchView,
     pub favourites_view: FavouritesView,
+    pub equalizer_view: EqualizerView,
     pub catalog_view: CatalogView,
 
     pub commander: Commander,
@@ -158,6 +161,8 @@ impl App {
         let search = Search::new();
         let search_tracks = search.tracks();
 
+        let equalizer = Equalizer::new();
+
         Ok(Self {
             config,
             theme: Theme::default(),
@@ -171,11 +176,13 @@ impl App {
             status,
             queue,
             search,
+            equalizer,
             catalog: Catalog::new(),
             current_queue_idx: None,
             playlist_view: PlaylistView::new(playlist_tracks),
             search_view: SearchView::new(search_tracks),
             favourites_view: FavouritesView::new(),
+            equalizer_view: EqualizerView::new(),
             catalog_view: CatalogView::new(),
             commander: Commander::new(),
             media_browser: MediaBrowser::new(),
