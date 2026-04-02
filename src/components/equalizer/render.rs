@@ -19,27 +19,31 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin},
     prelude::Rect,
-    style::{Color, Style},
-    text::Line,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Bar, BarChart, BarGroup, Block, Borders, Padding, Paragraph},
 };
 
 use crate::{components::EqualizerView, model::equalizer::Equalizer, theme::Theme};
 
-const FREQUENCIES: [&str; 18] = [
-    "20", "40", "63", "100", "160", "250", "400", "500", "630", "800", "1.2k", "2.5k", "5k", "8k",
-    "10k", "12k", "15k", "20k",
+use super::{EqualizerSelection, MAX_AMP, MIN_AMP};
+
+const FREQ_NUMS: [&str; 18] = [
+    "20", "40", "63", "100", "160", "250", "400", "500", "630", "800", "1.2", "2.5", "5", "8",
+    "10", "12", "15", "20",
+];
+const FREQ_UNITS: [&str; 18] = [
+    "Hz", "Hz", "Hz", "Hz", "Hz", "Hz", "Hz", "Hz", "Hz", "Hz", "kHz", "kHz", "kHz", "kHz", "kHz",
+    "kHz", "kHz", "kHz",
 ];
 
 impl EqualizerView {
     pub(crate) fn draw(&mut self, f: &mut Frame, area: Rect, equalizer: &Equalizer, theme: &Theme) {
-        // 1. Root Vertical Layout
         let root_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(2), Constraint::Min(0)])
             .split(area);
 
-        // Header
         f.render_widget(
             Paragraph::new("Equalizer Settings").block(
                 Block::default()
@@ -49,13 +53,11 @@ impl EqualizerView {
             root_chunks[0],
         );
 
-        // 2. Centering Logic (Updated Width)
-        // (19 bars * 3) + (18 gaps * 1) + 2 (Block borders) + 2 (Extra gap for Preamp) = 79
         let v_center = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(14),
+                Constraint::Length(28),
                 Constraint::Fill(1),
             ])
             .split(root_chunks[1]);
@@ -64,79 +66,165 @@ impl EqualizerView {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Fill(1),
-                Constraint::Length(79),
+                Constraint::Length(84),
                 Constraint::Fill(1),
             ])
             .split(v_center[1]);
 
         let content_area = h_center[1];
 
-        // 3. Horizontal Split: [Preamp (3)] [Gap (2)] [18-Bands (72)]
         let main_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(5), // Preamp + Border space
-                Constraint::Length(2), // The Gap
-                Constraint::Min(0),    // The 18 Bands
+                Constraint::Length(6),
+                Constraint::Length(3),
+                Constraint::Length(4),
+                Constraint::Min(0),
             ])
             .split(content_area.inner(Margin {
-                horizontal: 1,
-                vertical: 1,
+                horizontal: 0,
+                vertical: 0,
             }));
 
-        let amps = equalizer.amps.lock().unwrap();
+        let db_labels = Paragraph::new(vec![
+            Line::from(Span::styled(
+                format!("{:>3}dB", MAX_AMP as i32),
+                Style::default().add_modifier(Modifier::UNDERLINED),
+            )),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from("  0dB"),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("{:>3}dB", MIN_AMP as i32),
+                Style::default().add_modifier(Modifier::UNDERLINED),
+            )),
+            Line::from(""),
+            Line::from(""),
+            Line::from("   dB"),
+        ])
+        .style(Style::default().fg(Color::DarkGray));
 
-        // --- Render Preamp ---
-        // mpv property: "equalizer-preamp"
-        let preamp_val = (amps.preamp + 24.0) as u64;
+        f.render_widget(db_labels, main_layout[0]);
+
+        let amps = equalizer.amps.lock().unwrap();
+        let selected = self.selection();
+
+        let charts_y_offset = 1;
+        let preamp_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(charts_y_offset),
+                Constraint::Min(0),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
+            .split(main_layout[1]);
+
+        let preamp_val = (amps.preamp - MIN_AMP) as u64;
+        let preamp_selected = matches!(selected, EqualizerSelection::Preamp);
         let preamp_bar = BarChart::default()
-            .block(Block::default().title("P"))
+            .block(Block::default().style(Style::default().bg(Color::Indexed(234))))
             .data(
                 BarGroup::default().bars(&[Bar::default()
                     .value(preamp_val)
+                    .text_value("".to_string())
                     .label(Line::from("PRE"))
-                    .style(Style::default().fg(Color::Magenta))]),
-            )
-            .bar_width(3)
-            .max(36);
-        f.render_widget(preamp_bar, main_layout[0]);
-
-        // --- Render 18 Bands ---
-        let bars: Vec<Bar> = amps
-            .gains
-            .iter()
-            .enumerate()
-            .map(|(i, &gain)| {
-                let ui_value = (gain + 24.0) as u64;
-                Bar::default()
-                    .value(ui_value)
-                    .label(Line::from(FREQUENCIES[i]))
-                    .style(Style::default().fg(if gain > 0.0 {
-                        Color::Green
+                    .style(Style::default().fg(if preamp_selected {
+                        Color::Yellow
                     } else {
                         Color::Cyan
-                    }))
-            })
-            .collect();
-
-        let chart = BarChart::default()
-            .data(BarGroup::default().bars(&bars))
+                    }))]),
+            )
             .bar_width(3)
-            .bar_gap(1)
-            .max(36);
+            .max((MAX_AMP - MIN_AMP) as u64);
 
-        // Wrap the 18 bands in a block to give it the "EQ" title
+        f.render_widget(preamp_bar, preamp_chunks[1]);
         f.render_widget(
-            chart.block(Block::default().title(" Bands (Hz) ")),
-            main_layout[2],
+            Paragraph::new(format!("{:^3.0}", amps.preamp))
+                .style(Style::default().fg(Color::DarkGray)),
+            preamp_chunks[4],
         );
 
-        // Outer container for the whole EQ section
-        f.render_widget(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" 18-Band Audio Processor "),
-            content_area,
-        );
+        let mut bands_constraints = Vec::new();
+        for i in 0..18 {
+            bands_constraints.push(Constraint::Length(3));
+            if i < 17 {
+                bands_constraints.push(Constraint::Length(1));
+            }
+        }
+        let bands_columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(bands_constraints)
+            .split(main_layout[3]);
+
+        for i in 0..18 {
+            let col_idx = i * 2;
+            let gain = amps.gains[i];
+            let is_selected = matches!(selected, EqualizerSelection::Band(idx) if idx == i);
+            
+            let band_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(charts_y_offset),
+                    Constraint::Min(0),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                ])
+                .split(bands_columns[col_idx]);
+
+            let bar_chart = BarChart::default()
+                .block(Block::default().style(Style::default().bg(Color::Indexed(234))))
+                .data(BarGroup::default().bars(&[Bar::default()
+                    .value((gain - MIN_AMP) as u64)
+                    .text_value("".to_string())
+                    .style(Style::default().fg(if is_selected {
+                        Color::Yellow
+                    } else {
+                        Color::Cyan
+                    }))]))
+                .bar_width(3)
+                .max((MAX_AMP - MIN_AMP) as u64);
+
+            f.render_widget(bar_chart, band_chunks[1]);
+            
+            f.render_widget(
+                Paragraph::new(format!("{:^3}", FREQ_NUMS[i])).style(Style::default().fg(if is_selected { Color::Yellow } else { Color::White })),
+                band_chunks[2]
+            );
+            
+            f.render_widget(
+                Paragraph::new(format!("{:^3}", FREQ_UNITS[i])).style(Style::default().fg(Color::DarkGray)),
+                band_chunks[3]
+            );
+
+            f.render_widget(
+                Paragraph::new(format!("{:^3.0}", gain)).style(Style::default().fg(Color::DarkGray)),
+                band_chunks[5]
+            );
+        }
     }
 }

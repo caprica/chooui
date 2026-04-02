@@ -42,12 +42,14 @@ pub(super) fn handle_set_main_view(app: &mut App, main_view: MainView) {
     app.search_view.is_active = matches!(main_view, MainView::Search);
     app.favourites_view.is_active = matches!(main_view, MainView::Favourites);
     app.catalog_view.is_active = matches!(main_view, MainView::Catalog);
+    app.equalizer_view.is_active = matches!(main_view, MainView::Equalizer);
 
     if matches!(main_view, MainView::Browse) {
         app.favourites_view.is_active = false;
         app.catalog_view.is_active = false;
         app.playlist_view.is_active = false;
         app.search_view.is_active = false;
+        app.equalizer_view.is_active = false;
     }
     app.main_view = main_view;
 }
@@ -97,6 +99,12 @@ pub(super) fn handle_play_playlist(app: &mut App) -> Result<()> {
 
 pub(super) fn handle_shuffle_queue(app: &mut App) -> Result<()> {
     app.queue.shuffle();
+
+    Ok(())
+}
+
+pub(super) fn handle_reset_queue(app: &mut App) -> Result<()> {
+    app.queue.reset();
 
     Ok(())
 }
@@ -309,4 +317,18 @@ pub(super) fn handle_set_repeat_mode(app: &mut App, mode: RepeatMode) {
 pub(super) fn handle_track_updated(app: &mut App, track: TrackInfo) {
     app.queue.track_updated(&track);
     app.search.track_updated(&track);
+}
+
+pub(super) fn handle_update_equalizer_amp(app: &mut App, index: usize, value: f64) -> Result<()> {
+    // Update the model
+    if index == 0 {
+        app.equalizer.preamp_updated(value);
+    } else {
+        app.equalizer.amp_updated(index - 1, value);
+    }
+
+    // // Update the audio player
+    // app.audio_player.update_equalizer_amp(index, value)?;
+
+    Ok(())
 }

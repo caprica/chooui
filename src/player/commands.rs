@@ -50,6 +50,7 @@ pub(crate) enum AudioPlayerCommand {
     Stop,
     AdjustVolume(i32),
     ToggleMute,
+    UpdateEqualizerAmp(usize, f64),
 }
 
 /// Spawns the audio worker thread to process playback commands.
@@ -168,6 +169,16 @@ fn process_commands(
             }
             AudioPlayerCommand::ToggleMute => {
                 handler.command(&["cycle", "mute"]).unwrap();
+            }
+            AudioPlayerCommand::UpdateEqualizerAmp(index, value) => {
+                if index == 0 {
+                    // Preamp
+                    handler.set_property("equalizer-preamp", value)?;
+                } else {
+                    // Bands are 1-indexed in our scheme, but mpv uses 0-17
+                    let prop_name = format!("equalizer-band-{}", index - 1);
+                    handler.set_property(&prop_name, value)?;
+                }
             }
         }
     }

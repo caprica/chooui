@@ -184,6 +184,7 @@ impl Commander {
             ["ms"] => {} // mode shuffle
 
             ["sq"] => event_tx.send(AppEvent::ShuffleQueue)?,
+            ["rq"] => event_tx.send(AppEvent::ResetQueue)?,
 
             ["r0"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::NoRepeat))?,
             ["r1"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatOne))?,

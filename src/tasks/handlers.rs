@@ -123,7 +123,7 @@ pub(super) fn add_matching_track_to_queue(ctx: &mut TaskContext, track: String) 
 
 pub(super) fn play_track(ctx: &mut TaskContext, mut track: TrackInfo) -> Result<()> {
     let durable_id = track.durable_id;
-    ctx.event_tx.send(AppEvent::PlayTrack(track.clone()))?;
+    ctx.event_tx.send(AppEvent::PlayTrack(track.clone()))?; // FIXME not sure this is right... but this is the only place playtrack is used currently
 
     let new_count = db::increment_play_count(ctx.conn, durable_id)?;
     track.play_count = u32::try_from(new_count).unwrap_or(u32::MAX);

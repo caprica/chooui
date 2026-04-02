@@ -79,6 +79,9 @@ impl Queue {
         self.sync_tracks();
     }
 
+    // hmm...
+    // i think it should re-add from tracks, not this popping played stuff - i don't even know why i did it this way
+    // this doesn't work how i think it works - we don't have a master copy of tracks we can restore in reset
     pub(crate) fn reset(&mut self) {
         while let Some(track) = self.played.pop() {
             self.queued.push_front(track);

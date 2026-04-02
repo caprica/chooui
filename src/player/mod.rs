@@ -122,4 +122,16 @@ impl AudioPlayer {
         self.command_tx.send(AudioPlayerCommand::Seek(delta))?;
         Ok(())
     }
+
+    /// Update an equalizer band amplitude.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The band index (0 = preamp, 1-18 = frequency bands).
+    /// * `value` - The amplitude value in dB (-20 to 20).
+    pub(crate) fn update_equalizer_amp(&self, index: usize, value: f64) -> Result<()> {
+        self.command_tx
+            .send(AudioPlayerCommand::UpdateEqualizerAmp(index, value))?;
+        Ok(())
+    }
 }

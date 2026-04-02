@@ -59,6 +59,8 @@ pub(crate) enum AppEvent {
 
     PlayTrack(TrackInfo),
     PlayPlaylist,
+    ShuffleQueue,
+    ResetQueue,
 
     AddTracksToPlaylist(Vec<TrackInfo>),
     AddSelectionToPlaylist,
@@ -108,6 +110,7 @@ pub(crate) enum AppEvent {
     SetRepeatMode(RepeatMode),
 
     TrackUpdated(TrackInfo),
+    UpdateEqualizerAmp(usize, f64),
 }
 
 #[derive(Debug)]
@@ -143,6 +146,8 @@ pub(crate) fn process_events(
             AppEvent::AddSelectionToPlaylist => handle_add_selection_to_playlist(app),
             AppEvent::PlayTrack(track) => handle_play_track(app, track)?,
             AppEvent::PlayPlaylist => handle_play_playlist(app)?,
+            AppEvent::ShuffleQueue => handle_shuffle_queue(app)?,
+            AppEvent::ResetQueue => handle_reset_queue(app)?,
             AppEvent::AddTracksToPlaylist(tracks) => handle_add_tracks_to_playlist(app, tracks)?,
             AppEvent::ArtistSelectionChanged(id) => handle_artist_selection_changed(app, id)?,
             AppEvent::AlbumSelectionChanged(id) => handle_album_selection_changed(app, id)?,
@@ -165,6 +170,7 @@ pub(crate) fn process_events(
             AppEvent::ClearQueue => handle_clear_queue(app),
             AppEvent::SetRepeatMode(mode) => handle_set_repeat_mode(app, mode),
             AppEvent::TrackUpdated(track) => handle_track_updated(app, track),
+            AppEvent::UpdateEqualizerAmp(index, value) => handle_update_equalizer_amp(app, index, value)?,
             AppEvent::Tick | _ => handle_tick(app),
         }
 
@@ -212,7 +218,13 @@ pub(super) fn process_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
     if app.search_view.is_active {
         let event = Event::Key(key);
         app.search_view
-            .process_event(event, &app.task_tx, &app.event_tx)?;
+            .process_event(event, &app.task_tx, &app.event_tx)?; // FIXME why not &event for all of these?
+    }
+
+    if app.equalizer_view.is_active {
+        let event = Event::Key(key);
+        app.equalizer_view
+            .process_event(&event, &app.task_tx, &app.event_tx, &app.equalizer)?;
     }
 
     process_global_key_event(app, key)?;
@@ -229,7 +241,8 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('2'), _) => set_view(app, MainView::Search)?,
         (KeyCode::Char('3'), _) => set_view(app, MainView::Favourites)?,
         (KeyCode::Char('4'), _) => set_view(app, MainView::Browse)?,
-        (KeyCode::Char('5'), _) => set_view(app, MainView::Catalog)?,
+        (KeyCode::Char('5'), _) => set_view(app, MainView::Equalizer)?,
+        (KeyCode::Char('6'), _) => set_view(app, MainView::Catalog)?,
 
         // Browser Navigation
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => move_selection(app, 1)?,
