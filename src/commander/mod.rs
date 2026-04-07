@@ -190,9 +190,9 @@ impl Commander {
             ["r1"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatOne))?,
             ["ra"] => event_tx.send(AppEvent::SetRepeatMode(RepeatMode::RepeatAll))?,
 
-            ["p"] => {}  // play/pause
-            ["pn"] => {} // play next
-            ["pp"] => {} // play previous
+            ["p"] => event_tx.send(AppEvent::Key(crossterm::event::KeyEvent::new(KeyCode::Char(' '), crossterm::event::KeyModifiers::NONE)))?,
+            ["pn"] => event_tx.send(AppEvent::NextTrack)?,
+            ["pp"] => event_tx.send(AppEvent::PreviousTrack)?,
 
             ["v", volume] => {} // volume set
             ["vc", delta] => {} // volume change by delta

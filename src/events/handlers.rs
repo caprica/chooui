@@ -187,6 +187,18 @@ pub(super) fn handle_volume_changed(app: &mut App, vol: u32) {
 
 pub(super) fn handle_track_finished(app: &mut App) -> Result<()> {
     app.player_time = app.player_duration;
+    next_track(app)
+}
+
+pub(super) fn handle_next_track(app: &mut App) -> Result<()> {
+    next_track(app)
+}
+
+pub(super) fn handle_previous_track(app: &mut App) -> Result<()> {
+    previous_track(app)
+}
+
+fn next_track(app: &mut App) -> Result<()> {
     if app.play_mode == PlayMode::Playlist {
         let lock = app.queue.tracks();
         let tracks = lock.lock().unwrap();
@@ -215,16 +227,52 @@ pub(super) fn handle_track_finished(app: &mut App) -> Result<()> {
                 }
             } else {
                 app.now_playing = None;
+                app.audio_player.stop()?;
             }
         }
     } else if app.play_mode == PlayMode::PlayOne {
         if let Some(track) = app.now_playing.clone() {
             match app.repeat_mode {
-                RepeatMode::NoRepeat => {}
+                RepeatMode::NoRepeat => {
+                    app.audio_player.stop()?;
+                }
                 RepeatMode::RepeatOne | RepeatMode::RepeatAll => {
                     app.task_tx.send(AppTask::PlayTrack(track))?;
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn previous_track(app: &mut App) -> Result<()> {
+    if app.play_mode == PlayMode::Playlist {
+        let lock = app.queue.tracks();
+        let tracks = lock.lock().unwrap();
+        let total_tracks = tracks.len();
+
+        if total_tracks == 0 {
+            app.current_queue_idx = None;
+            return Ok(());
+        }
+
+        if let Some(idx) = app.current_queue_idx.as_mut() {
+            if app.repeat_mode != RepeatMode::RepeatOne {
+                if *idx > 0 {
+                    *idx -= 1;
+                } else if app.repeat_mode == RepeatMode::RepeatAll {
+                    *idx = total_tracks.saturating_sub(1);
+                }
+            }
+
+            if let Some(track) = tracks.get(*idx).cloned() {
+                app.task_tx.send(AppTask::PlayTrack(track))?;
+            }
+        }
+    } else if app.play_mode == PlayMode::PlayOne {
+        if let Some(track) = app.now_playing.clone() {
+            app.task_tx.send(AppTask::PlayTrack(track))?;
         }
     }
 
@@ -327,8 +375,8 @@ pub(super) fn handle_update_equalizer_amp(app: &mut App, index: usize, value: f6
         app.equalizer.amp_updated(index - 1, value);
     }
 
-    // // Update the audio player
-    // app.audio_player.update_equalizer_amp(index, value)?;
+    // Update the audio player
+    app.audio_player.update_equalizer_amp(index, value)?;
 
     Ok(())
 }

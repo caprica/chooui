@@ -61,7 +61,7 @@ impl AudioPlayer {
     }
 
     // Maps internal audio backend flags to a simplified [`PlayerState`].
-    fn player_state(is_paused: bool, is_idle: bool) -> PlayerState {
+    pub(crate) fn player_state(is_paused: bool, is_idle: bool) -> PlayerState {
         if is_idle {
             PlayerState::Stopped
         } else if is_paused {

@@ -6,10 +6,11 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1.0.102"
+biquad = "0.4.2"
 confy = "2.0.0"
 crossterm = "0.29.0"
 lofty = "0.23.2"
-mpv = "0.2.3"
+rodio = { version = "0.20.1", features = ["symphonia-mp3"] }
 rand = "0.10.0"
 ratatui = "0.30.0"
 rusqlite = { version = "0.38.0", features = ["bundled"] }

@@ -80,6 +80,9 @@ pub(crate) enum AppEvent {
 
     AddTracksToQueue(Vec<TrackInfo>),
 
+    NextTrack,
+    PreviousTrack,
+
     PlayerStateChanged(PlayerState),
     TitleChanged(String),
     DurationChanged(u64),
@@ -152,6 +155,8 @@ pub(crate) fn process_events(
             AppEvent::ArtistSelectionChanged(id) => handle_artist_selection_changed(app, id)?,
             AppEvent::AlbumSelectionChanged(id) => handle_album_selection_changed(app, id)?,
             AppEvent::AddTracksToQueue(tracks) => handle_add_tracks_to_queue(app, tracks),
+            AppEvent::NextTrack => handle_next_track(app)?,
+            AppEvent::PreviousTrack => handle_previous_track(app)?,
             AppEvent::SetBrowserArtists(artists) => handle_set_browser_artists(app, artists)?,
             AppEvent::SetBrowserAlbums(albums) => handle_set_browser_albums(app, albums)?,
             AppEvent::SetBrowserTracks(tracks) => handle_set_browser_tracks(app, tracks)?,
@@ -258,6 +263,8 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
 
         // Audio: Playback
         (KeyCode::Char(' '), _) => toggle_playback(app)?,
+        (KeyCode::Char('n'), _) => app.event_tx.send(AppEvent::NextTrack)?,
+        (KeyCode::Char('p'), _) => app.event_tx.send(AppEvent::PreviousTrack)?,
         (KeyCode::Char('s'), _) => stop_playback(app)?,
         (KeyCode::Char('m'), _) => toggle_mute(app)?,
 
