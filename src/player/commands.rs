@@ -48,6 +48,7 @@ pub(crate) enum AudioPlayerCommand {
     Stop,
     AdjustVolume(i32),
     ToggleMute,
+    ResetEqualizer,
     UpdateEqualizerAmp(usize, f64),
 }
 
@@ -149,6 +150,12 @@ fn audio_player_worker(
                     } else {
                         sink.set_volume(current_volume);
                     }
+                }
+                AudioPlayerCommand::ResetEqualizer => {
+                    let mut s = eq_settings.lock().unwrap();
+                    s.preamp_gain = 1.0;
+                    s.band_gains = [0.0; BANDS];
+                    s.dirty = true;
                 }
                 AudioPlayerCommand::UpdateEqualizerAmp(index, value) => {
                     let mut settings = eq_settings.lock().unwrap();

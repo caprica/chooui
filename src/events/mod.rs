@@ -113,6 +113,7 @@ pub(crate) enum AppEvent {
     SetRepeatMode(RepeatMode),
 
     TrackUpdated(TrackInfo),
+    ResetEqualizer,
     UpdateEqualizerAmp(usize, f64),
 }
 
@@ -175,6 +176,7 @@ pub(crate) fn process_events(
             AppEvent::ClearQueue => handle_clear_queue(app),
             AppEvent::SetRepeatMode(mode) => handle_set_repeat_mode(app, mode),
             AppEvent::TrackUpdated(track) => handle_track_updated(app, track),
+            AppEvent::ResetEqualizer => handle_reset_equalizer(app)?,
             AppEvent::UpdateEqualizerAmp(index, value) => handle_update_equalizer_amp(app, index, value)?,
             AppEvent::Tick | _ => handle_tick(app),
         }

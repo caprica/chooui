@@ -152,7 +152,7 @@ impl EqualizerView {
                     .text_value("".to_string())
                     .label(Line::from("PRE"))
                     .style(Style::default().fg(if preamp_selected {
-                        Color::Yellow
+                        theme.accent_colour
                     } else {
                         Color::Cyan
                     }))]),
@@ -163,7 +163,7 @@ impl EqualizerView {
         f.render_widget(preamp_bar, preamp_chunks[1]);
         f.render_widget(
             Paragraph::new(format!("{:^3.0}", amps.preamp))
-                .style(Style::default().fg(Color::DarkGray)),
+                .style(Style::default().fg(theme.accent_colour)),
             preamp_chunks[4],
         );
 
@@ -203,7 +203,7 @@ impl EqualizerView {
                         .value((gain - MIN_AMP) as u64)
                         .text_value("".to_string())
                         .style(Style::default().fg(if is_selected {
-                            Color::Yellow
+                            theme.accent_colour
                         } else {
                             Color::Cyan
                         }))]),
@@ -216,7 +216,7 @@ impl EqualizerView {
             f.render_widget(
                 Paragraph::new(format!("{:^3}", FREQ_NUMS[i])).style(Style::default().fg(
                     if is_selected {
-                        Color::Yellow
+                        theme.accent_colour
                     } else {
                         Color::White
                     },
@@ -232,7 +232,7 @@ impl EqualizerView {
 
             f.render_widget(
                 Paragraph::new(format!("{:^3.0}", gain))
-                    .style(Style::default().fg(Color::DarkGray)),
+                    .style(Style::default().fg(theme.accent_colour)),
                 band_chunks[5],
             );
         }

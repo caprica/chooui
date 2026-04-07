@@ -134,4 +134,10 @@ impl AudioPlayer {
             .send(AudioPlayerCommand::UpdateEqualizerAmp(index, value))?;
         Ok(())
     }
+
+    /// Resets the equalizer to all 0 preamp and gains.
+    pub(crate) fn reset_equalizer(&self) -> Result<()> {
+        self.command_tx.send(AudioPlayerCommand::ResetEqualizer)?;
+        Ok(())
+    }
 }

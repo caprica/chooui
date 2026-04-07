@@ -367,6 +367,19 @@ pub(super) fn handle_track_updated(app: &mut App, track: TrackInfo) {
     app.search.track_updated(&track);
 }
 
+pub(super) fn handle_reset_equalizer(app: &mut App) -> Result<()> {
+    // Reset the model
+    app.equalizer.set_amps(crate::model::equalizer::Amps {
+        preamp: 0.0,
+        gains: [0.0; 18],
+    });
+
+    // Reset the audio player
+    app.audio_player.reset_equalizer()?;
+
+    Ok(())
+}
+
 pub(super) fn handle_update_equalizer_amp(app: &mut App, index: usize, value: f64) -> Result<()> {
     // Update the model
     if index == 0 {

@@ -180,6 +180,8 @@ impl Commander {
 
             ["cq"] => event_tx.send(AppEvent::ClearQueue)?,
 
+            ["re"] => event_tx.send(AppEvent::ResetEqualizer)?,
+
             ["md"] => {} // mode default
             ["ms"] => {} // mode shuffle
 
