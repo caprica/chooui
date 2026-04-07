@@ -113,12 +113,12 @@ impl EqualizerView {
             Line::from(""),
             Line::from(""),
             Line::from(""),
-            Line::from(""),
-            Line::from(""),
             Line::from(Span::styled(
                 format!("{:>3}dB", MIN_AMP as i32),
                 Style::default().add_modifier(Modifier::UNDERLINED),
             )),
+            Line::from(""),
+            Line::from(""),
             Line::from(""),
             Line::from(""),
             Line::from("   dB"),
@@ -183,7 +183,7 @@ impl EqualizerView {
             let col_idx = i * 2;
             let gain = amps.gains[i];
             let is_selected = matches!(selected, EqualizerSelection::Band(idx) if idx == i);
-            
+
             let band_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -198,32 +198,42 @@ impl EqualizerView {
 
             let bar_chart = BarChart::default()
                 .block(Block::default().style(Style::default().bg(Color::Indexed(234))))
-                .data(BarGroup::default().bars(&[Bar::default()
-                    .value((gain - MIN_AMP) as u64)
-                    .text_value("".to_string())
-                    .style(Style::default().fg(if is_selected {
-                        Color::Yellow
-                    } else {
-                        Color::Cyan
-                    }))]))
+                .data(
+                    BarGroup::default().bars(&[Bar::default()
+                        .value((gain - MIN_AMP) as u64)
+                        .text_value("".to_string())
+                        .style(Style::default().fg(if is_selected {
+                            Color::Yellow
+                        } else {
+                            Color::Cyan
+                        }))]),
+                )
                 .bar_width(3)
                 .max((MAX_AMP - MIN_AMP) as u64);
 
             f.render_widget(bar_chart, band_chunks[1]);
-            
+
             f.render_widget(
-                Paragraph::new(format!("{:^3}", FREQ_NUMS[i])).style(Style::default().fg(if is_selected { Color::Yellow } else { Color::White })),
-                band_chunks[2]
-            );
-            
-            f.render_widget(
-                Paragraph::new(format!("{:^3}", FREQ_UNITS[i])).style(Style::default().fg(Color::DarkGray)),
-                band_chunks[3]
+                Paragraph::new(format!("{:^3}", FREQ_NUMS[i])).style(Style::default().fg(
+                    if is_selected {
+                        Color::Yellow
+                    } else {
+                        Color::White
+                    },
+                )),
+                band_chunks[2],
             );
 
             f.render_widget(
-                Paragraph::new(format!("{:^3.0}", gain)).style(Style::default().fg(Color::DarkGray)),
-                band_chunks[5]
+                Paragraph::new(format!("{:^3}", FREQ_UNITS[i]))
+                    .style(Style::default().fg(Color::DarkGray)),
+                band_chunks[3],
+            );
+
+            f.render_widget(
+                Paragraph::new(format!("{:^3.0}", gain))
+                    .style(Style::default().fg(Color::DarkGray)),
+                band_chunks[5],
             );
         }
     }
