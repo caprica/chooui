@@ -162,9 +162,12 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
         .use_unicode(true);
     f.render_widget(volume_gauge, volume_layout[0]);
 
-    let volume_percent = (vol_ratio * 130.0) as u16;
-
-    let volume_label = Paragraph::new(format!(" {}%", volume_percent))
+    let volume_label_text = if let Some(v) = app.volume {
+        format!(" {}%", v)
+    } else {
+        " --%".to_string()
+    };
+    let volume_label = Paragraph::new(volume_label_text)
         .alignment(Alignment::Right)
         .fg(Color::White);
     f.render_widget(volume_label, volume_layout[1]);

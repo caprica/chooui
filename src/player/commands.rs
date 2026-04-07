@@ -13,28 +13,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! MPV-backed audio playback engine and event processing.
+//! Native Rust audio playback engine and event processing.
 //!
-//! This module provides the core audio playback logic, leveraging `libmpv` for
-//! high-quality audio decoding and playback control. It manages a background
-//! worker thread that bridges the gap between the application's command-based
-//! interface and the low-level MPV property observation system.
-//!
-//! # Architecture
-//!
-//! The engine operates using a dual-channel communication pattern:
-//! 1. **Command Channel**: Receives [`AudioPlayerCommand`]s from the UI to
-//!    control playback (play, pause, seek, etc.).
-//! 2. **Event Channel**: Broadcasts [`AppEvent`]s to notify the UI of state
-//!    changes, such as track progress, volume updates, and metadata changes.
-
-// TODO consider splitting this into commands/events like elsewhere?
+//! This module provides the core audio playback logic, leveraging `rodio` and
+//! `symphonia` for high-quality audio decoding and playback control. It also
+//! implements a multi-band equalizer using `biquad` filters.
 
 use anyhow::{Context, Result};
-use mpv::Format;
+use biquad::{Biquad, Coefficients, DirectForm2Transposed, ToHertz, Type, Q_BUTTERWORTH_F32};
+use rodio::{Decoder, OutputStream, Sink, Source, Sample};
 use std::{
-    sync::mpsc::{self, Receiver, Sender},
+    fs::File,
+    io::BufReader,
+    sync::{Arc, Mutex, mpsc::{Receiver, Sender}},
     thread,
+    time::Duration,
 };
 
 use crate::{
@@ -42,7 +35,12 @@ use crate::{
     player::{AudioPlayer, PlayerState},
 };
 
-#[derive(Debug)]
+const BANDS: usize = 18;
+const FREQUENCIES: [f32; BANDS] = [
+    20.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 500.0, 630.0, 800.0, 1200.0, 2500.0, 5000.0, 8000.0, 10000.0, 12000.0, 15000.0, 20000.0,
+];
+
+#[derive(Debug, Clone)]
 pub(crate) enum AudioPlayerCommand {
     PlayFile(String),
     TogglePause,
@@ -53,18 +51,23 @@ pub(crate) enum AudioPlayerCommand {
     UpdateEqualizerAmp(usize, f64),
 }
 
+struct EqSettings {
+    preamp_gain: f32,
+    band_gains: [f32; BANDS],
+    dirty: bool,
+}
+
+impl EqSettings {
+    fn new() -> Self {
+        Self {
+            preamp_gain: 1.0,
+            band_gains: [0.0; BANDS],
+            dirty: true,
+        }
+    }
+}
+
 /// Spawns the audio worker thread to process playback commands.
-///
-/// This function takes ownership of the command receiver and the event sender,
-/// moving them into a dedicated background thread.
-///
-/// If the internal worker returns an error, it is caught here and broadcast as
-/// a fatal application event.
-///
-/// # Arguments
-///
-/// * `command_rx` - The receiving end of the player command channel.
-/// * `event_tx` - The channel used to broadcast playback updates and errors.
 pub(crate) fn spawn_player_worker(
     command_rx: Receiver<AudioPlayerCommand>,
     event_tx: Sender<AppEvent>,
@@ -73,184 +76,238 @@ pub(crate) fn spawn_player_worker(
 
     thread::spawn(move || {
         if let Err(e) = audio_player_worker(command_rx, event_tx) {
-            let _ = error_tx.send(AppEvent::FatalError(format!("MPV worker failure: {:?}", e)));
+            let _ = error_tx.send(AppEvent::FatalError(format!("Audio worker failure: {:?}", e)));
         }
     });
 }
 
-/// The primary execution loop for the audio player backend.
-///
-/// This function initializes a local `libmpv` context and enters a multi-loop
-/// select pattern to handle incoming commands and outgoing events
-/// simultaneously.
-///
-/// # Arguments
-///
-/// * `command_rx` - The receiving end of a channel for incoming player commands.
-/// * `event_tx` - The sending end of a channel for broadcasting
-///    application-level events.
-///
-/// # Errors
-///
-/// Returns an error if the MPV context fails to initialize or if the internal
-/// command/event loops encounter an unrecoverable failure.
 fn audio_player_worker(
     command_rx: Receiver<AudioPlayerCommand>,
     event_tx: Sender<AppEvent>,
 ) -> Result<()> {
-    let mut handler = (|| {
-        let mut builder = mpv::MpvHandlerBuilder::new().context("Failed to create MPV builder")?;
-        builder
-            .set_option("vo", "null")
-            .context("Failed to set no video output")?;
-        builder.build().context("Failed to build MPV handler")
-    })()?;
+    let (_stream, stream_handle) = OutputStream::try_default().context("Failed to open audio output stream")?;
+    let sink = Sink::try_new(&stream_handle).context("Failed to create audio sink")?;
 
-    handler
-        .observe_property::<&str>("media-title", 0)
-        .context("Failed to observe media-title")?;
-    handler
-        .observe_property::<f64>("duration", 0)
-        .context("Failed to observe duration")?;
-    handler
-        .observe_property::<bool>("pause", 0)
-        .context("Failed to observe pause")?;
-    handler
-        .observe_property::<f64>("time-pos", 0)
-        .context("Failed to observe time-pos")?;
-    handler
-        .observe_property::<f64>("volume", 0)
-        .context("Failed to observe volume")?;
-    handler
-        .observe_property::<f64>("idle-active", 0)
-        .context("Failed to observe idle-active")?;
-
-    let mut is_paused = false;
-    let mut is_idle = true;
-
+    let eq_settings = Arc::new(Mutex::new(EqSettings::new()));
+    
+    let mut current_volume = sink.volume();
+    let mut is_muted = false;
     let mut player_state = PlayerState::Stopped;
+    let mut last_pos = Duration::ZERO;
+
+    // Send the library's initial volume to sync UI
+    event_tx.send(AppEvent::VolumeChanged((current_volume * 100.0) as u32))?;
 
     loop {
-        process_commands(&mut handler, &command_rx)?;
-        process_mpv_events(
-            &mut handler,
-            &mut is_paused,
-            &mut is_idle,
-            &mut player_state,
-            &event_tx,
-        )?;
-    }
-}
-
-/// Drains and executes all pending commands from the application channel.
-fn process_commands(
-    handler: &mut mpv::MpvHandler,
-    command_rx: &mpsc::Receiver<AudioPlayerCommand>,
-) -> Result<()> {
-    while let Ok(command) = command_rx.try_recv() {
-        match command {
-            AudioPlayerCommand::PlayFile(filename) => {
-                handler
-                    .command(&["loadfile", &filename, "replace"])
-                    .context(format!("Failed to load file: {}", &filename))?;
-                handler.set_property("pause", false)?;
-            }
-            AudioPlayerCommand::TogglePause => {
-                handler.command(&["cycle", "pause"]).unwrap();
-            }
-            AudioPlayerCommand::Seek(delta) => {
-                handler.command(&["seek", &delta.to_string(), "relative"])?;
-            }
-            AudioPlayerCommand::Stop => {
-                handler.command(&["stop"])?;
-            }
-            AudioPlayerCommand::AdjustVolume(delta) => {
-                handler.command(&["add", "volume", &delta.to_string()])?;
-            }
-            AudioPlayerCommand::ToggleMute => {
-                handler.command(&["cycle", "mute"]).unwrap();
-            }
-            AudioPlayerCommand::UpdateEqualizerAmp(index, value) => {
-                if index == 0 {
-                    // Preamp
-                    handler.set_property("equalizer-preamp", value)?;
-                } else {
-                    // Bands are 1-indexed in our scheme, but mpv uses 0-17
-                    let prop_name = format!("equalizer-band-{}", index - 1);
-                    handler.set_property(&prop_name, value)?;
+        while let Ok(command) = command_rx.try_recv() {
+            match command {
+                AudioPlayerCommand::PlayFile(filename) => {
+                    let file = File::open(&filename).context(format!("Failed to open file: {}", &filename))?;
+                    let source = Decoder::new(BufReader::new(file)).context("Failed to decode audio file")?;
+                    
+                    let duration = source.total_duration().map(|d| d.as_secs()).unwrap_or(0);
+                    event_tx.send(AppEvent::DurationChanged(duration))?;
+                    
+                    let eq_source = EqualizerSourceInner::new(source, Arc::clone(&eq_settings));
+                    
+                    sink.stop();
+                    sink.append(eq_source);
+                    sink.play();
+                    
+                    event_tx.send(AppEvent::TitleChanged(filename))?;
+                }
+                AudioPlayerCommand::TogglePause => {
+                    if sink.is_paused() {
+                        sink.play();
+                    } else {
+                        sink.pause();
+                    }
+                }
+                AudioPlayerCommand::Seek(delta) => {
+                    let current_pos = sink.get_pos();
+                    let new_pos = if delta >= 0 {
+                        current_pos + Duration::from_secs(delta as u64)
+                    } else {
+                        current_pos.saturating_sub(Duration::from_secs(delta.abs() as u64))
+                    };
+                    let _ = sink.try_seek(new_pos);
+                }
+                AudioPlayerCommand::Stop => {
+                    sink.stop();
+                }
+                AudioPlayerCommand::AdjustVolume(delta) => {
+                    current_volume = (current_volume + (delta as f32 / 100.0)).clamp(0.0, 1.0);
+                    if !is_muted {
+                        sink.set_volume(current_volume);
+                    }
+                    event_tx.send(AppEvent::VolumeChanged((current_volume * 100.0) as u32))?;
+                }
+                AudioPlayerCommand::ToggleMute => {
+                    is_muted = !is_muted;
+                    if is_muted {
+                        sink.set_volume(0.0);
+                    } else {
+                        sink.set_volume(current_volume);
+                    }
+                }
+                AudioPlayerCommand::UpdateEqualizerAmp(index, value) => {
+                    let mut settings = eq_settings.lock().unwrap();
+                    if index == 0 {
+                        // Preamp: convert dB to linear gain
+                        settings.preamp_gain = 10.0f32.powf(value as f32 / 20.0);
+                    } else if index <= BANDS {
+                        settings.band_gains[index - 1] = value as f32;
+                    }
+                    settings.dirty = true;
                 }
             }
         }
-    }
 
-    Ok(())
+        let is_idle = sink.empty();
+        let is_paused = sink.is_paused();
+        
+        let new_player_state = AudioPlayer::player_state(is_paused, is_idle);
+        if new_player_state != player_state {
+            player_state = new_player_state;
+            event_tx.send(AppEvent::PlayerStateChanged(player_state))?;
+            
+            if is_idle && last_pos.as_secs() > 0 {
+                 event_tx.send(AppEvent::TrackFinished)?;
+            }
+        }
+
+        if !is_idle && !is_paused {
+            let pos = sink.get_pos();
+            if pos != last_pos {
+                event_tx.send(AppEvent::TimeChanged(pos.as_secs_f64()))?;
+                last_pos = pos;
+            }
+        } else if is_idle {
+            last_pos = Duration::ZERO;
+        }
+
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
-/// Polls for MPV events and synchronizes the application state.
-///
-/// This function waits for up to 50ms for an event from the MPV context.
-/// If an event occurs, it updates internal flags and broadcasts any necessary
-/// [`AppEvent`]s to the UI.
-fn process_mpv_events(
-    handler: &mut mpv::MpvHandler,
-    is_paused: &mut bool,
-    is_idle: &mut bool,
-    current_state: &mut PlayerState,
-    event_tx: &mpsc::Sender<AppEvent>,
-) -> Result<()> {
-    if let Some(mpv_event) = handler.wait_event(0.05) {
-        let app_event = match mpv_event {
-            mpv::Event::PropertyChange { name, change, .. } => match (name, change) {
-                ("media-title", Format::Str(title)) => {
-                    Some(AppEvent::TitleChanged(title.to_string()))
-                }
-                ("duration", Format::Double(duration)) => {
-                    Some(AppEvent::DurationChanged(duration as u64))
-                }
-                ("pause", Format::Flag(pause)) => {
-                    *is_paused = pause;
-                    None
-                }
-                ("time-pos", Format::Double(seconds)) if seconds >= 0.0 => {
-                    Some(AppEvent::TimeChanged(seconds))
-                }
-                ("volume", Format::Double(volume)) => {
-                    Some(AppEvent::VolumeChanged(volume.round() as u32))
-                }
-                ("idle-active", Format::Flag(idle_active)) => {
-                    *is_idle = idle_active;
-                    None
-                }
-                _ => None,
-            },
-            mpv::Event::EndFile(result) => {
-                if let Ok(reason) = result {
-                    match reason {
-                        mpv::EndFileReason::MPV_END_FILE_REASON_EOF => {
-                            Some(AppEvent::TrackFinished)
-                        }
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }
-            _ => None,
+struct EqualizerSourceInner<S: Source>
+where
+    S::Item: Sample,
+{
+    input: S,
+    settings: Arc<Mutex<EqSettings>>,
+    filters: Vec<[DirectForm2Transposed<f32>; 2]>,
+    sample_rate: u32,
+    channels: u16,
+    current_channel: u16,
+    preamp_gain: f32,
+}
+
+impl<S: Source> EqualizerSourceInner<S>
+where
+    S::Item: Sample,
+{
+    fn new(input: S, settings: Arc<Mutex<EqSettings>>) -> Self {
+        let sample_rate = input.sample_rate();
+        let channels = input.channels();
+        
+        let (preamp_gain, band_gains) = {
+            let s = settings.lock().unwrap();
+            (s.preamp_gain, s.band_gains)
         };
 
-        let new_player_state = AudioPlayer::player_state(*is_paused, *is_idle);
-
-        if new_player_state != *current_state {
-            *current_state = new_player_state;
-            event_tx
-                .send(AppEvent::PlayerStateChanged(new_player_state))
-                .context("Failed to send player state event")?;
-        }
-
-        if let Some(event) = app_event {
-            event_tx.send(event).context("Failed to send event")?;
-        }
+        let mut source = Self {
+            input,
+            settings,
+            filters: Vec::new(),
+            sample_rate,
+            channels,
+            current_channel: 0,
+            preamp_gain,
+        };
+        source.rebuild_filters(preamp_gain, band_gains);
+        source
     }
 
-    Ok(())
+    fn rebuild_filters(&mut self, preamp_gain: f32, band_gains: [f32; BANDS]) {
+        self.preamp_gain = preamp_gain;
+        self.filters.clear();
+        for (i, &freq) in FREQUENCIES.iter().enumerate() {
+            let gain = band_gains[i];
+            let coeffs = Coefficients::<f32>::from_params(
+                Type::PeakingEQ(gain),
+                self.sample_rate.hz(),
+                freq.hz(),
+                Q_BUTTERWORTH_F32,
+            ).unwrap();
+            
+            self.filters.push([
+                DirectForm2Transposed::<f32>::new(coeffs),
+                DirectForm2Transposed::<f32>::new(coeffs),
+            ]);
+        }
+    }
+}
+
+impl<S: Source> Iterator for EqualizerSourceInner<S>
+where
+    S::Item: Sample,
+{
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_channel == 0 {
+            let (dirty, preamp, gains) = {
+                let mut s = self.settings.lock().unwrap();
+                if s.dirty {
+                    s.dirty = false;
+                    (true, s.preamp_gain, s.band_gains)
+                } else {
+                    (false, 0.0, [0.0; BANDS])
+                }
+            };
+            if dirty {
+                self.rebuild_filters(preamp, gains);
+            }
+        }
+
+        let mut sample = self.input.next()?.to_f32();
+        sample *= self.preamp_gain;
+
+        let chan = self.current_channel as usize;
+        for filter_pair in &mut self.filters {
+            let filter_idx = if chan < 2 { chan } else { 0 };
+            sample = filter_pair[filter_idx].run(sample);
+        }
+
+        self.current_channel = (self.current_channel + 1) % self.channels;
+        Some(sample)
+    }
+}
+
+impl<S: Source> Source for EqualizerSourceInner<S>
+where
+    S::Item: Sample,
+{
+    fn current_frame_len(&self) -> Option<usize> {
+        self.input.current_frame_len()
+    }
+
+    fn channels(&self) -> u16 {
+        self.channels
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        self.input.total_duration()
+    }
+
+    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
+        self.input.try_seek(pos)?;
+        self.current_channel = 0;
+        Ok(())
+    }
 }
