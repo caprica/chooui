@@ -43,6 +43,7 @@ pub(super) fn handle_set_main_view(app: &mut App, main_view: MainView) {
     app.favourites_view.is_active = matches!(main_view, MainView::Favourites);
     app.catalog_view.is_active = matches!(main_view, MainView::Catalog);
     app.equalizer_view.is_active = matches!(main_view, MainView::Equalizer);
+    app.help_view.is_active = matches!(main_view, MainView::Help);
 
     if matches!(main_view, MainView::Browse) {
         app.favourites_view.is_active = false;
@@ -50,6 +51,7 @@ pub(super) fn handle_set_main_view(app: &mut App, main_view: MainView) {
         app.playlist_view.is_active = false;
         app.search_view.is_active = false;
         app.equalizer_view.is_active = false;
+        app.help_view.is_active = false;
     }
     app.main_view = main_view;
 }

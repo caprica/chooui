@@ -68,7 +68,7 @@ use std::{
 use crate::{
     browser::MediaBrowser,
     commander::Commander,
-    components::{CatalogView, EqualizerView, FavouritesView, PlaylistView, SearchView},
+    components::{CatalogView, EqualizerView, FavouritesView, HelpView, PlaylistView, SearchView},
     config::AppConfig,
     events::{AppEvent, process_events},
     model::{TrackInfo, catalog::Catalog, equalizer::Equalizer, queue::Queue, search::Search},
@@ -86,6 +86,7 @@ enum MainView {
     Browse,
     Equalizer,
     Catalog,
+    Help,
 }
 
 #[derive(Debug, PartialEq)]
@@ -133,6 +134,7 @@ struct App {
     pub favourites_view: FavouritesView,
     pub equalizer_view: EqualizerView,
     pub catalog_view: CatalogView,
+    pub help_view: HelpView,
 
     pub commander: Commander,
     pub media_browser: MediaBrowser,
@@ -184,6 +186,7 @@ impl App {
             favourites_view: FavouritesView::new(),
             equalizer_view: EqualizerView::new(),
             catalog_view: CatalogView::new(),
+            help_view: HelpView::new(),
             commander: Commander::new(),
             media_browser: MediaBrowser::new(),
             player_state: PlayerState::Stopped,

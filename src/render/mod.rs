@@ -91,6 +91,7 @@ pub(crate) fn draw(f: &mut Frame, app: &mut App) {
                 .draw(f, main[1], &mut app.equalizer, &app.theme)
         }
         crate::MainView::Catalog => app.catalog_view.draw(f, main[1], &app.catalog, &app.theme),
+        crate::MainView::Help => app.help_view.draw(f, main[1], &app.theme),
     };
 
     draw_player(f, outer[1], app);

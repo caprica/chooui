@@ -244,6 +244,7 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('q'), _) => exit_application(app)?,
 
         // View Navigation
+        (KeyCode::Char('0'), _) => set_view(app, MainView::Help)?,
         (KeyCode::Char('1'), _) => set_view(app, MainView::Playlist)?,
         (KeyCode::Char('2'), _) => set_view(app, MainView::Search)?,
         (KeyCode::Char('3'), _) => set_view(app, MainView::Favourites)?,

@@ -13,23 +13,26 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Shared UI components and state management.
-//!
-//! This module acts as a central export point for reusable interface elements,
-//! organizing complex widgets into separately maintainable sub-modules.
+//! Event routing for the help view.
 
-pub(crate) mod catalog;
-pub(crate) mod equalizer;
-pub(crate) mod favourites;
-pub(crate) mod help;
-pub(crate) mod playlist;
-pub(crate) mod search;
-pub(crate) mod track_table;
+use std::sync::mpsc::Sender;
 
-pub(crate) use catalog::*;
-pub(crate) use equalizer::*;
-pub(crate) use favourites::*;
-pub(crate) use help::*;
-pub(crate) use playlist::*;
-pub(crate) use search::*;
-pub(crate) use track_table::*;
+use anyhow::Result;
+use crossterm::event::Event;
+
+use crate::{components::HelpView, events::AppEvent, tasks::AppTask};
+
+impl HelpView {
+    pub(crate) fn process_event(
+        &mut self,
+        _event: Event,
+        _command_tx: &Sender<AppTask>,
+        _event_tx: &Sender<AppEvent>,
+    ) -> Result<()> {
+        if !self.is_active {
+            return Ok(());
+        }
+
+        Ok(())
+    }
+}

@@ -211,6 +211,7 @@ impl Commander {
             ["pq"] => event_tx.send(AppEvent::PlayPlaylist)?,
 
             // maybe vq vb vs vf vc etc?
+            ["0"] => event_tx.send(AppEvent::SetMainView(MainView::Help))?,
             ["1"] => event_tx.send(AppEvent::SetMainView(MainView::Playlist))?,
             ["2"] => event_tx.send(AppEvent::SetMainView(MainView::Browse))?,
             ["3"] => event_tx.send(AppEvent::SetMainView(MainView::Search))?,
