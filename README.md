@@ -2,7 +2,7 @@
 
 A simple terminal-based media player.
 
-Implemented using `Rust`, `ratatui` and `libmpv`.
+Implemented using `Rust`, `ratatui` and `rodio`.
 
 ## Status
 
