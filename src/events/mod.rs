@@ -36,6 +36,7 @@ use handlers::*;
 use key_handlers::*;
 
 use std::io::Stdout;
+use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent};
@@ -80,8 +81,16 @@ pub(crate) enum AppEvent {
 
     AddTracksToQueue(Vec<TrackInfo>),
 
+    Play,
+    Pause,
+    TogglePause,
+    StopPlayback,
     NextTrack,
     PreviousTrack,
+    Seek(Duration),
+    SeekBy(i32),
+    AdjustVolume(i32),
+    ToggleMute,
 
     PlayerStateChanged(PlayerState),
     TitleChanged(String),
@@ -156,8 +165,23 @@ pub(crate) fn process_events(
             AppEvent::ArtistSelectionChanged(id) => handle_artist_selection_changed(app, id)?,
             AppEvent::AlbumSelectionChanged(id) => handle_album_selection_changed(app, id)?,
             AppEvent::AddTracksToQueue(tracks) => handle_add_tracks_to_queue(app, tracks),
+            AppEvent::Play => app.audio_player.play()?,
+            AppEvent::Pause => app.audio_player.pause()?,
+            AppEvent::TogglePause => app.audio_player.toggle_pause()?,
+            AppEvent::StopPlayback => app.audio_player.stop()?,
             AppEvent::NextTrack => handle_next_track(app)?,
             AppEvent::PreviousTrack => handle_previous_track(app)?,
+            AppEvent::Seek(pos) => app.audio_player.seek_absolute(pos)?,
+            AppEvent::SeekBy(delta) => app.audio_player.seek(delta)?,
+            AppEvent::AdjustVolume(delta) => {
+                let current = app.volume.unwrap_or(100) as i32;
+                let new_vol = (current + delta).clamp(0, 100);
+                app.volume = Some(new_vol as u32);
+                app.audio_player.adjust_volume(delta)?;
+            }
+            AppEvent::ToggleMute => {
+                app.audio_player.toggle_mute()?;
+            }
             AppEvent::SetBrowserArtists(artists) => handle_set_browser_artists(app, artists)?,
             AppEvent::SetBrowserAlbums(albums) => handle_set_browser_albums(app, albums)?,
             AppEvent::SetBrowserTracks(tracks) => handle_set_browser_tracks(app, tracks)?,
@@ -259,23 +283,23 @@ fn process_global_key_event(app: &mut App, key: KeyEvent) -> Result<()> {
         (KeyCode::Char('l'), _) | (KeyCode::Right, _) => app.media_browser.next_pane(),
 
         // Audio: Seeking
-        (KeyCode::Char(','), _) => seek_fine(app, false)?,
-        (KeyCode::Char('.'), _) => seek_fine(app, true)?,
-        (KeyCode::Char('<'), _) => seek_coarse(app, false)?,
-        (KeyCode::Char('>'), _) => seek_coarse(app, true)?,
+        (KeyCode::Char(','), _) => app.event_tx.send(AppEvent::SeekBy(-5))?,
+        (KeyCode::Char('.'), _) => app.event_tx.send(AppEvent::SeekBy(5))?,
+        (KeyCode::Char('<'), _) => app.event_tx.send(AppEvent::SeekBy(-20))?,
+        (KeyCode::Char('>'), _) => app.event_tx.send(AppEvent::SeekBy(20))?,
 
         // Audio: Playback
-        (KeyCode::Char(' '), _) => toggle_playback(app)?,
+        (KeyCode::Char(' '), _) => app.event_tx.send(AppEvent::TogglePause)?,
         (KeyCode::Char('n'), _) => app.event_tx.send(AppEvent::NextTrack)?,
         (KeyCode::Char('p'), _) => app.event_tx.send(AppEvent::PreviousTrack)?,
-        (KeyCode::Char('s'), _) => stop_playback(app)?,
-        (KeyCode::Char('m'), _) => toggle_mute(app)?,
+        (KeyCode::Char('s'), _) => app.event_tx.send(AppEvent::StopPlayback)?,
+        (KeyCode::Char('m'), _) => app.event_tx.send(AppEvent::ToggleMute)?,
 
         // Audio: Volume
-        (KeyCode::Char('-'), _) => adjust_volume_fine(app, false)?,
-        (KeyCode::Char('='), _) => adjust_volume_fine(app, true)?,
-        (KeyCode::Char('_'), _) => adjust_volume_coarse(app, false)?,
-        (KeyCode::Char('+'), _) => adjust_volume_coarse(app, true)?,
+        (KeyCode::Char('-'), _) => app.event_tx.send(AppEvent::AdjustVolume(-1))?,
+        (KeyCode::Char('='), _) => app.event_tx.send(AppEvent::AdjustVolume(1))?,
+        (KeyCode::Char('_'), _) => app.event_tx.send(AppEvent::AdjustVolume(-5))?,
+        (KeyCode::Char('+'), _) => app.event_tx.send(AppEvent::AdjustVolume(5))?,
 
         // Queue Management
         (KeyCode::Char('a'), _) => add_selected_to_queue(app)?,

@@ -22,6 +22,7 @@
 use anyhow::{Context, Result};
 use biquad::{Biquad, Coefficients, DirectForm2Transposed, ToHertz, Type, Q_BUTTERWORTH_F32};
 use rodio::{Decoder, OutputStream, Sink, Source, Sample};
+use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, PlatformConfig, MediaPlayback, MediaPosition};
 use std::{
     fs::File,
     io::BufReader,
@@ -33,6 +34,7 @@ use std::{
 use crate::{
     events::AppEvent,
     player::{AudioPlayer, PlayerState},
+    model::TrackInfo,
 };
 
 const BANDS: usize = 18;
@@ -42,9 +44,12 @@ const FREQUENCIES: [f32; BANDS] = [
 
 #[derive(Debug, Clone)]
 pub(crate) enum AudioPlayerCommand {
-    PlayFile(String),
+    PlayTrack(TrackInfo),
+    Play,
+    Pause,
     TogglePause,
     Seek(i32),
+    SeekAbsolute(Duration),
     Stop,
     AdjustVolume(i32),
     ToggleMute,
@@ -90,11 +95,50 @@ fn audio_player_worker(
     let sink = Sink::try_new(&stream_handle).context("Failed to create audio sink")?;
 
     let eq_settings = Arc::new(Mutex::new(EqSettings::new()));
-    
+
     let mut current_volume = sink.volume();
     let mut is_muted = false;
     let mut player_state = PlayerState::Stopped;
     let mut last_pos = Duration::ZERO;
+    let mut current_track_duration = Duration::ZERO;
+
+    // Media Controls setup - unique name per instance like VLC
+    let pid = std::process::id();
+    let dbus_name = format!("choon_commander_{}", pid);
+
+    let config = PlatformConfig {
+        dbus_name: &dbus_name,
+        display_name: "Choon Commander",
+        hwnd: None,
+    };
+
+    let mut controls = MediaControls::new(config).ok();
+
+    if let Some(ref mut c) = controls {
+        // Explicitly set initial volume so MPRIS knows we support it
+        let _ = c.set_volume(current_volume as f64);
+
+        let event_tx_clone = event_tx.clone();
+        let _ = c.attach(move |event| {
+            match event {
+                MediaControlEvent::Play => { let _ = event_tx_clone.send(AppEvent::Play); }
+                MediaControlEvent::Pause => { let _ = event_tx_clone.send(AppEvent::Pause); }
+                MediaControlEvent::Toggle => { let _ = event_tx_clone.send(AppEvent::TogglePause); }
+                MediaControlEvent::Next => { let _ = event_tx_clone.send(AppEvent::NextTrack); }
+                MediaControlEvent::Previous => { let _ = event_tx_clone.send(AppEvent::PreviousTrack); }
+                MediaControlEvent::Stop => { let _ = event_tx_clone.send(AppEvent::StopPlayback); }
+                MediaControlEvent::SetPosition(pos) => { let _ = event_tx_clone.send(AppEvent::Seek(pos.0)); }
+                MediaControlEvent::SeekBy(dir, dur) => {
+                    let secs = dur.as_secs() as i32;
+                    match dir {
+                        souvlaki::SeekDirection::Forward => { let _ = event_tx_clone.send(AppEvent::SeekBy(secs)); }
+                        souvlaki::SeekDirection::Backward => { let _ = event_tx_clone.send(AppEvent::SeekBy(-secs)); }
+                    }
+                }
+                _ => {}
+            }
+        });
+    }
 
     // Send the library's initial volume to sync UI
     event_tx.send(AppEvent::VolumeChanged((current_volume * 100.0) as u32))?;
@@ -102,20 +146,39 @@ fn audio_player_worker(
     loop {
         while let Ok(command) = command_rx.try_recv() {
             match command {
-                AudioPlayerCommand::PlayFile(filename) => {
-                    let file = File::open(&filename).context(format!("Failed to open file: {}", &filename))?;
+                AudioPlayerCommand::PlayTrack(track) => {
+                    let file = File::open(&track.filename).context(format!("Failed to open file: {}", &track.filename))?;
                     let source = Decoder::new(BufReader::new(file)).context("Failed to decode audio file")?;
-                    
-                    let duration = source.total_duration().map(|d| d.as_secs()).unwrap_or(0);
-                    event_tx.send(AppEvent::DurationChanged(duration))?;
-                    
+
+                    let duration_secs = source.total_duration().map(|d| d.as_secs()).unwrap_or(0);
+                    current_track_duration = Duration::from_secs(duration_secs);
+                    event_tx.send(AppEvent::DurationChanged(duration_secs))?;
+
                     let eq_source = EqualizerSourceInner::new(source, Arc::clone(&eq_settings));
-                    
+
                     sink.stop();
                     sink.append(eq_source);
                     sink.play();
-                    
-                    event_tx.send(AppEvent::TitleChanged(filename))?;
+
+                    event_tx.send(AppEvent::TitleChanged(track.track_title.clone()))?;
+
+                    // Update Media Controls Metadata
+                    if let Some(ref mut c) = controls {
+                        let metadata = MediaMetadata {
+                            title: Some(&track.track_title),
+                            artist: Some(&track.artist_name),
+                            album: Some(&track.album_title),
+                            duration: Some(current_track_duration),
+                            ..Default::default()
+                        };
+                        let _ = c.set_metadata(metadata);
+                    }
+                }
+                AudioPlayerCommand::Play => {
+                    sink.play();
+                }
+                AudioPlayerCommand::Pause => {
+                    sink.pause();
                 }
                 AudioPlayerCommand::TogglePause => {
                     if sink.is_paused() {
@@ -133,8 +196,12 @@ fn audio_player_worker(
                     };
                     let _ = sink.try_seek(new_pos);
                 }
+                AudioPlayerCommand::SeekAbsolute(pos) => {
+                    let _ = sink.try_seek(pos);
+                }
                 AudioPlayerCommand::Stop => {
                     sink.stop();
+                    last_pos = Duration::ZERO;
                 }
                 AudioPlayerCommand::AdjustVolume(delta) => {
                     current_volume = (current_volume + (delta as f32 / 100.0)).clamp(0.0, 1.0);
@@ -151,6 +218,7 @@ fn audio_player_worker(
                         sink.set_volume(current_volume);
                     }
                 }
+
                 AudioPlayerCommand::ResetEqualizer => {
                     let mut s = eq_settings.lock().unwrap();
                     s.preamp_gain = 1.0;
@@ -172,14 +240,24 @@ fn audio_player_worker(
 
         let is_idle = sink.empty();
         let is_paused = sink.is_paused();
-        
+
         let new_player_state = AudioPlayer::player_state(is_paused, is_idle);
         if new_player_state != player_state {
             player_state = new_player_state;
             event_tx.send(AppEvent::PlayerStateChanged(player_state))?;
-            
+
             if is_idle && last_pos.as_secs() > 0 {
                  event_tx.send(AppEvent::TrackFinished)?;
+            }
+
+            // Update Media Controls Playback Status
+            if let Some(ref mut c) = controls {
+                let playback = match player_state {
+                    PlayerState::Playing => MediaPlayback::Playing { progress: Some(MediaPosition(sink.get_pos())) },
+                    PlayerState::Paused => MediaPlayback::Paused { progress: Some(MediaPosition(sink.get_pos())) },
+                    PlayerState::Stopped => MediaPlayback::Stopped,
+                };
+                let _ = c.set_playback(playback);
             }
         }
 
@@ -188,6 +266,11 @@ fn audio_player_worker(
             if pos != last_pos {
                 event_tx.send(AppEvent::TimeChanged(pos.as_secs_f64()))?;
                 last_pos = pos;
+
+                // Periodically update position in media controls
+                if let Some(ref mut c) = controls {
+                    let _ = c.set_playback(MediaPlayback::Playing { progress: Some(MediaPosition(pos)) });
+                }
             }
         } else if is_idle {
             last_pos = Duration::ZERO;
@@ -217,7 +300,7 @@ where
     fn new(input: S, settings: Arc<Mutex<EqSettings>>) -> Self {
         let sample_rate = input.sample_rate();
         let channels = input.channels();
-        
+
         let (preamp_gain, band_gains) = {
             let s = settings.lock().unwrap();
             (s.preamp_gain, s.band_gains)
@@ -247,7 +330,7 @@ where
                 freq.hz(),
                 Q_BUTTERWORTH_F32,
             ).unwrap();
-            
+
             self.filters.push([
                 DirectForm2Transposed::<f32>::new(coeffs),
                 DirectForm2Transposed::<f32>::new(coeffs),
