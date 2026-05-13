@@ -9,7 +9,7 @@ anyhow = "1.0.102"
 biquad = "0.4.2"
 confy = "2.0.0"
 crossterm = "0.29.0"
-lofty = "0.23.2"
+lofty = "0.24.0"
 rodio = { version = "0.20.1", features = ["symphonia-mp3"] }
 rand = "0.10.0"
 ratatui = "0.30.0"
@@ -19,3 +19,4 @@ thiserror = "2.0.17"
 tui-input = "0.15.0"
 walkdir = "2.5.0"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+souvlaki = { version = "0.8.3", default-features = false, features = ["use_zbus", "pollster"] }
