@@ -26,7 +26,7 @@ use std::sync::mpsc;
 
 use anyhow::Result;
 
-use crate::{events::AppEvent, player::commands::AudioPlayerCommand};
+use crate::{events::AppEvent, model::TrackInfo, player::commands::AudioPlayerCommand};
 
 /// Represents the current playback status of the audio engine.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -75,11 +75,23 @@ impl AudioPlayer {
     ///
     /// # Arguments
     ///
-    /// * `filename` - The path to the audio file on disk.
+    /// * `track` - The track metadata and filename.
     ///
-    pub(crate) fn play_file(&self, filename: &str) -> Result<()> {
+    pub(crate) fn play_track(&self, track: TrackInfo) -> Result<()> {
         self.command_tx
-            .send(AudioPlayerCommand::PlayFile(filename.to_string()))?;
+            .send(AudioPlayerCommand::PlayTrack(track))?;
+        Ok(())
+    }
+
+    /// Resume playback.
+    pub(crate) fn play(&self) -> Result<()> {
+        self.command_tx.send(AudioPlayerCommand::Play)?;
+        Ok(())
+    }
+
+    /// Pause playback.
+    pub(crate) fn pause(&self) -> Result<()> {
+        self.command_tx.send(AudioPlayerCommand::Pause)?;
         Ok(())
     }
 
@@ -120,6 +132,12 @@ impl AudioPlayer {
     /// * `delta` - The amount to seek (positive or negative).
     pub(crate) fn seek(&self, delta: i32) -> Result<()> {
         self.command_tx.send(AudioPlayerCommand::Seek(delta))?;
+        Ok(())
+    }
+
+    /// Seeks to an absolute position.
+    pub(crate) fn seek_absolute(&self, pos: std::time::Duration) -> Result<()> {
+        self.command_tx.send(AudioPlayerCommand::SeekAbsolute(pos))?;
         Ok(())
     }
 

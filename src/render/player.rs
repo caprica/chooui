@@ -144,7 +144,7 @@ pub(crate) fn draw_player(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(repeat_label, control_chunks[0]);
 
     let volume = app.volume.unwrap_or(0);
-    let vol_ratio = (volume as f64 / 130.0).clamp(0.0, 1.0);
+    let vol_ratio = (volume as f64 / 100.0).clamp(0.0, 1.0);
 
     let volume_layout = Layout::default()
         .direction(Direction::Horizontal)
