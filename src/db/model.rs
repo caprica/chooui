@@ -50,6 +50,7 @@ impl TrackInfo {
             filename: row.get(9)?,
             play_count: row.get(10)?,
             rating: row.get(11)?,
+            created_at: row.get(12)?,
         })
     }
 }

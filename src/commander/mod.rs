@@ -26,7 +26,7 @@ use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-use crate::{MainView, RepeatMode, events::AppEvent, model::SearchQuery, tasks::AppTask};
+use crate::{MainView, RepeatMode, events::AppEvent, model::{Recency, SearchQuery}, tasks::AppTask};
 
 pub(crate) struct Commander {
     active: bool,
@@ -120,6 +120,19 @@ impl Commander {
             ["far"] => event_tx.send(AppEvent::FindSelectedArtist)?,
             ["fal"] => event_tx.send(AppEvent::FindSelectedAlbum)?,
             ["ftr"] => {}
+
+            ["fld"] => {
+                let query = SearchQuery::for_recency(Recency::LastDay);
+                task_tx.send(AppTask::Search(query))?
+            }
+            ["flw"] => {
+                let query = SearchQuery::for_recency(Recency::LastWeek);
+                task_tx.send(AppTask::Search(query))?
+            }
+            ["flm"] => {
+                let query = SearchQuery::for_recency(Recency::LastMonth);
+                task_tx.send(AppTask::Search(query))?
+            }
 
             ["far", artist_parts @ ..] => {
                 if !artist_parts.is_empty() {

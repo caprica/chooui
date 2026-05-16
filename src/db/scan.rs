@@ -255,9 +255,19 @@ fn process_track(
         .to_str()
         .context("Path contains invalid UTF-8")?
         .to_string();
+
+    let metadata = std::fs::metadata(path)?;
+    let created_at = metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .unwrap_or_else(|_| std::time::SystemTime::now())
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
     tx.execute(
-        "INSERT OR IGNORE INTO tracks (album_id, durable_id, track_number, title, duration, genre, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        params![album_id, durable_id, track_number, track_title, duration, genre, year, filename],
+        "INSERT OR IGNORE INTO tracks (album_id, durable_id, track_number, title, duration, genre, year, filename, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        params![album_id, durable_id, track_number, track_title, duration, genre, year, filename, created_at],
     )?;
 
     tx.execute(

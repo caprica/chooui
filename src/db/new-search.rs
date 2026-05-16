@@ -25,10 +25,14 @@ fn search_tracks(conn: &Connection, search_type: SearchType, search_value: &str)
     };
 
     let sql = format!("
-        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
+        SELECT
+            ar.name, al.title,
+            tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename,
+            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0), tr.created_at
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
+        LEFT JOIN track_stats ts ON tr.durable_id = ts.durable_id
         WHERE {join} LIKE ?
         ORDER BY ar.name, al.title, tr.track_number
     ");

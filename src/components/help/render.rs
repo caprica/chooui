@@ -198,6 +198,9 @@ fn build_right_commands() -> Vec<Line<'static>> {
     kv(&mut lines, "far <name>", "Find by artist");
     kv(&mut lines, "fal <name>", "Find by album");
     kv(&mut lines, "ftr <name>", "Find by track");
+    kv(&mut lines, "fld", "Find added today");
+    kv(&mut lines, "flw", "Find added this week");
+    kv(&mut lines, "flm", "Find added this month");
     blank(&mut lines);
 
     section_title(&mut lines, "Repeat");
