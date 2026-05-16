@@ -60,6 +60,7 @@ pub struct TrackInfo {
     pub filename: String,
     pub play_count: u32,
     pub rating: Rating,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,39 +70,48 @@ pub(crate) enum Rating {
     Dislike = -1,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Recency {
+    LastDay,
+    LastWeek,
+    LastMonth,
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub(crate) struct SearchQuery {
     pub(crate) search: String,
     pub(crate) artist: String,
     pub(crate) album: String,
     pub(crate) track: String,
+    pub(crate) recency: Option<Recency>,
 }
 
 impl SearchQuery {
     pub(crate) fn for_artist(artist: String) -> Self {
         Self {
-            search: String::default(),
-            artist: artist,
-            album: String::default(),
-            track: String::default(),
+            artist,
+            ..Default::default()
         }
     }
 
     pub(crate) fn for_album(album: String) -> Self {
         Self {
-            search: String::default(),
-            artist: String::default(),
-            album: album,
-            track: String::default(),
+            album,
+            ..Default::default()
         }
     }
 
     pub(crate) fn for_track(track: String) -> Self {
         Self {
-            search: String::default(),
-            artist: String::default(),
-            album: String::default(),
-            track: track,
+            track,
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn for_recency(recency: Recency) -> Self {
+        Self {
+            recency: Some(recency),
+            ..Default::default()
         }
     }
 }

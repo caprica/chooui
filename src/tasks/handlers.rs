@@ -44,7 +44,8 @@ pub(super) fn search(ctx: &mut TaskContext, query: SearchQuery) -> Result<()> {
     let can_search = query.search.len() >= MIN_SEARCH_LEN
         || query.artist.len() >= MIN_SEARCH_LEN
         || query.album.len() >= MIN_SEARCH_LEN
-        || query.track.len() >= MIN_SEARCH_LEN;
+        || query.track.len() >= MIN_SEARCH_LEN
+        || query.recency.is_some();
 
     if can_search {
         let search_results = db::search(ctx.conn, &query)?;

@@ -36,7 +36,7 @@ pub(crate) mod scan;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 
-use crate::model::{Album, Artist, Rating, SearchQuery, Track, TrackInfo};
+use crate::model::{Album, Artist, Rating, Recency, SearchQuery, Track, TrackInfo};
 
 const MIN_SEARCH_LEN: usize = 3;
 
@@ -131,11 +131,13 @@ fn create_schema(conn: &Connection) -> Result<()> {
             genre TEXT,
             year INTEGER,
             filename TEXT NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL,
             UNIQUE (album_id, filename),
             FOREIGN KEY (album_id) REFERENCES albums (id) ON DELETE CASCADE
         );
 
         CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks (album_id);
+        CREATE INDEX IF NOT EXISTS idx_tracks_created_at ON tracks (created_at);
 
         CREATE TABLE IF NOT EXISTS track_stats (
             durable_id INTEGER PRIMARY KEY,
@@ -300,10 +302,14 @@ pub fn fetch_album_tracks(conn: &Connection, album_id: i32) -> Result<Vec<Track>
 /// ```
 pub(crate) fn fetch_artist_trackinfo(conn: &Connection, artist_id: i32) -> Result<Vec<TrackInfo>> {
     let sql = "
-        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.filename
+        SELECT
+            ar.name, al.title,
+            tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename,
+            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0), tr.created_at
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
+        LEFT JOIN track_stats ts ON tr.durable_id = ts.durable_id
         WHERE ar.id = ?
         ORDER BY al.title, tr.track_number
     ";
@@ -343,10 +349,14 @@ pub(crate) fn fetch_artist_trackinfo(conn: &Connection, artist_id: i32) -> Resul
 /// ```
 pub(crate) fn fetch_album_track_info(conn: &Connection, album_id: i32) -> Result<Vec<TrackInfo>> {
     let sql = "
-        SELECT ar.name, al.title, tr.id, tr.track_number, tr.title, tr.filename
+        SELECT
+            ar.name, al.title,
+            tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename,
+            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0), tr.created_at
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
+        LEFT JOIN track_stats ts ON tr.durable_id = ts.durable_id
         WHERE al.id = ?
         ORDER BY tr.track_number
     ";
@@ -388,10 +398,14 @@ pub(crate) fn fetch_album_track_info(conn: &Connection, album_id: i32) -> Result
 /// ```
 pub(crate) fn fetch_track_info(conn: &Connection, track_id: i32) -> Result<TrackInfo> {
     let sql = "
-        SELECT ar.name, al.title, tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename
+        SELECT
+            ar.name, al.title,
+            tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename,
+            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0), tr.created_at
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
+        LEFT JOIN track_stats ts ON tr.durable_id = ts.durable_id
         WHERE tr.id = ?
     ";
 
@@ -406,7 +420,7 @@ pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<Track
         SELECT
             ar.name, al.title,
             tr.id, tr.durable_id, tr.track_number, tr.title, tr.duration, tr.year, tr.genre, tr.filename,
-            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0)
+            COALESCE(ts.play_count, 0), COALESCE(ts.rating, 0), tr.created_at
         FROM tracks tr
         JOIN albums al ON tr.album_id = al.id
         JOIN artists ar ON al.artist_id = ar.id
@@ -439,12 +453,25 @@ pub(crate) fn search(conn: &Connection, query: &SearchQuery) -> Result<Vec<Track
         params.push(format!("%{}%", query.track.to_lowercase()));
     }
 
+    if let Some(recency) = &query.recency {
+        let sql_threshold = match recency {
+            Recency::LastDay => "strftime('%s', 'now', 'localtime', 'start of day', 'utc')",
+            Recency::LastWeek => "strftime('%s', 'now', 'localtime', 'start of day', '-6 days', 'utc')",
+            Recency::LastMonth => "strftime('%s', 'now', 'localtime', 'start of day', '-1 month', 'utc')",
+        };
+        filters.push(format!("tr.created_at >= ({})", sql_threshold));
+    }
+
     if !filters.is_empty() {
         sql.push_str(" WHERE ");
         sql.push_str(&filters.join(" AND "));
     }
 
-    sql.push_str(" ORDER BY ar.name, al.title, tr.track_number");
+    if query.recency.is_some() {
+        sql.push_str(" ORDER BY (SELECT MAX(t2.created_at) FROM tracks t2 WHERE t2.album_id = tr.album_id) DESC, tr.album_id, tr.track_number");
+    } else {
+        sql.push_str(" ORDER BY ar.name, al.title, tr.track_number");
+    }
 
     let mut stmt = conn.prepare_cached(&sql)?;
     let results = stmt
